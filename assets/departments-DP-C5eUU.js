@@ -1,0 +1,2 @@
+async function i(t,r){const a=(await t.get(`/api/${r}/Master/country`,{params:{PageSize:300}})).data;return(a==null?void 0:a.data)??(a==null?void 0:a.items)??(Array.isArray(a)?a:[])}async function e(t,r){const a=(await t.get(`/api/${r}/application`,{params:{PageSize:100}})).data;return(a==null?void 0:a.data)??(a==null?void 0:a.items)??(Array.isArray(a)?a:[])}export{e as a,i as l};
+//# sourceMappingURL=departments-DP-C5eUU.js.map
