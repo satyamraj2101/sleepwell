@@ -8,6 +8,7 @@ import path from "path";
 // In production, deploy a minimal Express reverse proxy (see src/server/proxy.ts).
 
 export default defineConfig({
+  base: "/sleepwell/",
   plugins: [react()],
   resolve: {
     alias: {
