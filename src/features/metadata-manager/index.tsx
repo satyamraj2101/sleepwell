@@ -521,7 +521,7 @@ function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption,
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-[13px] font-medium text-foreground truncate">{f.fieldDisplayName || f.fieldName}</span>
-            {isMissing && <AlertTriangle size={10} className="text-red-400 flex-shrink-0" title="No options" />}
+            {isMissing && <AlertTriangle size={10} className="text-red-400 flex-shrink-0" />}
           </div>
           <p className="text-[10px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
         </div>
@@ -1019,6 +1019,25 @@ function IconBtn({ children, title, onClick, className }: {
     >
       {children}
     </button>
+  );
+}
+
+function StatusDot({ active, label, color }: { active: boolean; label: string; color: "green" | "gray" | "amber" | "blue" }) {
+  const colors = {
+    green: active ? "bg-emerald-500" : "bg-zinc-600",
+    gray: active ? "bg-zinc-400" : "bg-zinc-700",
+    amber: active ? "bg-amber-500" : "bg-zinc-600",
+    blue: active ? "bg-blue-500" : "bg-zinc-600",
+  };
+  return (
+    <div
+      title={label}
+      className={cn(
+        "w-1.5 h-1.5 rounded-full transition-colors",
+        colors[color],
+        !active && "opacity-40"
+      )}
+    />
   );
 }
 
