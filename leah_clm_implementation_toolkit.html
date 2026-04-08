@@ -1,0 +1,590 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); color: var(--color-text-primary); }
+.wrap { padding: 0 0 2rem; }
+.tabs { display: flex; gap: 0; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 1.5rem; overflow-x: auto; }
+.tab { padding: 10px 18px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--color-text-secondary); border-bottom: 2px solid transparent; white-space: nowrap; transition: color .15s, border-color .15s; }
+.tab.on { color: var(--color-text-primary); border-bottom-color: var(--color-text-primary); }
+.tab:hover:not(.on) { color: var(--color-text-primary); }
+.section { display: none; }
+.section.on { display: block; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 10px; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; cursor: pointer; transition: border-color .15s; }
+.card:hover { border-color: var(--color-border-secondary); }
+.card.sel { border-color: var(--color-text-primary); }
+.tag { display: inline-flex; align-items: center; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 99px; }
+.tag-c { background: var(--color-background-info); color: var(--color-text-info); }
+.tag-g { background: var(--color-background-success); color: var(--color-text-success); }
+.tag-w { background: var(--color-background-warning); color: var(--color-text-warning); }
+.tag-d { background: var(--color-background-danger); color: var(--color-text-danger); }
+.divider { height: 0.5px; background: var(--color-border-tertiary); margin: 1.25rem 0; }
+.feat { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.feat:last-child { border-bottom: none; }
+.feat-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-secondary); flex-shrink: 0; margin-top: 7px; }
+.feat-dot.hi { background: var(--color-text-primary); }
+.detail-panel { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-tertiary); display: inline-block; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid2a { display: grid; grid-template-columns: 280px 1fr; gap: 14px; align-items: start; }
+.met { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px 14px; }
+.ep { font-family: var(--font-mono); font-size: 11px; background: var(--color-background-secondary); padding: 2px 7px; border-radius: var(--border-radius-md); color: var(--color-text-secondary); display: inline-block; margin: 2px 2px 2px 0; }
+.stack-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; }
+.test-card { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1rem 1.25rem; margin-bottom: 10px; }
+.flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.flow-box { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 5px 10px; font-size: 12px; }
+.arrow { color: var(--color-text-secondary); font-size: 12px; }
+h2 { font-size: 18px; font-weight: 500; }
+h3 { font-size: 15px; font-weight: 500; }
+p,li { font-size: 13.5px; line-height: 1.65; color: var(--color-text-secondary); }
+li { margin-left: 1.2rem; }
+ul { margin: 6px 0; }
+strong { font-weight: 500; color: var(--color-text-primary); }
+@media (max-width: 680px) { .grid2a { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+<div class="tabs">
+  <button class="tab on" onclick="switchTab('overview')">Overview</button>
+  <button class="tab" onclick="switchTab('tools')">Tool Breakdown</button>
+  <button class="tab" onclick="switchTab('testing')">Testing Module</button>
+  <button class="tab" onclick="switchTab('stack')">Tech Stack</button>
+</div>
+
+<!-- OVERVIEW -->
+<div id="overview" class="section on">
+  <p style="margin-bottom:1.25rem;">Click any tool card to jump to its full breakdown.</p>
+  <div class="grid3" id="tool-grid"></div>
+  <div class="divider"></div>
+  <div class="grid2" style="gap:10px;margin-top:4px;">
+    <div class="met"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">Configurator impact</div><div style="font-size:22px;font-weight:500;">11 tools</div><div style="font-size:12px;color:var(--color-text-secondary);">replacing 100% manual UI work</div></div>
+    <div class="met"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">Time saved per project</div><div style="font-size:22px;font-weight:500;">60+ hrs</div><div style="font-size:12px;color:var(--color-text-secondary);">UAT, go-live, post-support</div></div>
+    <div class="met"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">New API surface (stg5)</div><div style="font-size:22px;font-weight:500;">110+ endpoints</div><div style="font-size:12px;color:var(--color-text-secondary);">vs 24 in v1.9 PDF</div></div>
+    <div class="met"><div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">Critical gap fixed</div><div style="font-size:22px;font-weight:500;">Dropdown values</div><div style="font-size:12px;color:var(--color-text-secondary);">Master data now visible in Quick-Edit</div></div>
+  </div>
+</div>
+
+<!-- TOOL BREAKDOWN -->
+<div id="tools" class="section">
+  <div class="grid2a">
+    <div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;">Select tool</div>
+      <div id="tool-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+    <div id="tool-detail"></div>
+  </div>
+</div>
+
+<!-- TESTING MODULE -->
+<div id="testing" class="section">
+  <h2 style="margin-bottom:6px;">Configuration testing module</h2>
+  <p style="margin-bottom:1.5rem;">A purpose-built testing layer that validates Leah CLM configuration end-to-end before UAT sign-off. Catches misconfiguration early — not at go-live.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:1.5rem;">
+    <div class="met"><div style="font-size:12px;font-weight:500;margin-bottom:4px;">Auto-assignment tester</div><p>Simulate contract creation for any app type and see exactly who gets assigned — before a single real contract is submitted.</p></div>
+    <div class="met"><div style="font-size:12px;font-weight:500;margin-bottom:4px;">Field visibility validator</div><p>Verify that every conditional field shows/hides correctly based on other field values. Test all permutations without clicking through the UI.</p></div>
+    <div class="met"><div style="font-size:12px;font-weight:500;margin-bottom:4px;">Date rule preview</div><p>Input a start date and term, preview all calculated dates (expiry, renewal, notice period) before activating the rule on production contracts.</p></div>
+    <div class="met"><div style="font-size:12px;font-weight:500;margin-bottom:4px;">Approval gate checker</div><p>Run a contract through the full approval chain check — see which approval gates fire in sequence before attempting e-signature.</p></div>
+  </div>
+
+  <h3 style="margin-bottom:10px;">Test scenario runner</h3>
+  <div class="test-card">
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Dealer contract — full lifecycle test</div>
+    <div class="flow">
+      <div class="flow-box">Create contract<br><span style="font-size:10px;color:var(--color-text-secondary);">POST /contract-request</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Apply auto-assign<br><span style="font-size:10px;color:var(--color-text-secondary);">POST /auto-assignment-rule/apply</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Check field visibility<br><span style="font-size:10px;color:var(--color-text-secondary);">GET /intake-form-field-groups</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Validate date rules<br><span style="font-size:10px;color:var(--color-text-secondary);">POST /date-rules/evaluate</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Check approval gates<br><span style="font-size:10px;color:var(--color-text-secondary);">GET /contractapproval/preexecution</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box" style="border-color:var(--color-border-success);color:var(--color-text-success);">Pass / Fail report</div>
+    </div>
+    <p style="margin-top:8px;font-size:12px;">Each step logs pass/fail with the actual API response. Failed steps show the exact error and which config needs fixing.</p>
+  </div>
+
+  <div class="test-card">
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Email mask safety check — pre go-live</div>
+    <div class="flow">
+      <div class="flow-box">Fetch all users<br><span style="font-size:10px;color:var(--color-text-secondary);">GET /v1/user</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Count masked vs unmasked</div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Confirm 0 unmasked pre-UAT</div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Confirm all unmasked at go-live</div>
+      <span class="arrow">→</span>
+      <div class="flow-box" style="border-color:var(--color-border-success);color:var(--color-text-success);">Certification report</div>
+    </div>
+  </div>
+
+  <div class="test-card">
+    <div style="font-size:13px;font-weight:500;margin-bottom:8px;">Bulk import dry-run</div>
+    <div class="flow">
+      <div class="flow-box">Download template<br><span style="font-size:10px;color:var(--color-text-secondary);">GET /bulk-import-template/download</span></div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Validate field IDs exist</div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Check dropdown values match options</div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Test-create 1 record</div>
+      <span class="arrow">→</span>
+      <div class="flow-box">Verify in Leah snapshot</div>
+      <span class="arrow">→</span>
+      <div class="flow-box" style="border-color:var(--color-border-success);color:var(--color-text-success);">Approve for bulk run</div>
+    </div>
+  </div>
+
+  <h3 style="margin:1.25rem 0 10px;">What the testing module produces</h3>
+  <div class="grid2" style="gap:10px;">
+    <div class="stack-card"><strong>Configuration health report</strong><p style="margin-top:4px;">Pass/fail per config item with API evidence. Shareable with the client as UAT sign-off documentation.</p></div>
+    <div class="stack-card"><strong>Regression test suite</strong><p style="margin-top:4px;">Save test scenarios so re-running after a config change takes 30 seconds instead of hours of re-testing.</p></div>
+    <div class="stack-card"><strong>Diff report</strong><p style="margin-top:4px;">Compare configuration between staging and production environments — catch any discrepancy before go-live.</p></div>
+    <div class="stack-card"><strong>Audit trail export</strong><p style="margin-top:4px;">Every test action logged with timestamp and API response — provides a full record for compliance.</p></div>
+  </div>
+</div>
+
+<!-- TECH STACK -->
+<div id="stack" class="section">
+  <h2 style="margin-bottom:6px;">Recommended tech stack</h2>
+  <p style="margin-bottom:1.5rem;">Optimised for a fast, maintainable, single-developer build that the Integreon team can ship incrementally. Every choice prioritises developer velocity and UI performance.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:1.5rem;">
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-c">Frontend</span>
+        <strong>React 18 + Vite</strong>
+      </div>
+      <p><strong>Why:</strong> Vite's HMR makes iteration instant. React's component model maps perfectly to Leah's repeating patterns (field groups, user rows, contract cards). No build config overhead.</p>
+      <div style="margin-top:8px;"><span class="ep">react 18</span><span class="ep">vite 5</span><span class="ep">react-router-dom</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-c">UI Components</span>
+        <strong>shadcn/ui + Tailwind</strong>
+      </div>
+      <p><strong>Why:</strong> shadcn gives you copy-paste composable components (Table, Dialog, Select, Command palette) — no library lock-in. Tailwind makes layout changes instant without leaving JSX.</p>
+      <div style="margin-top:8px;"><span class="ep">shadcn/ui</span><span class="ep">tailwindcss</span><span class="ep">lucide-react</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-g">Data fetching</span>
+        <strong>TanStack Query v5</strong>
+      </div>
+      <p><strong>Why:</strong> Automatic caching, background refetch, and stale-while-revalidate make the app feel instant. Mutations with optimistic updates. Handles Leah's paginated lists perfectly with <code>useInfiniteQuery</code>.</p>
+      <div style="margin-top:8px;"><span class="ep">@tanstack/react-query</span><span class="ep">axios</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-g">State</span>
+        <strong>Zustand</strong>
+      </div>
+      <p><strong>Why:</strong> Lightweight global store for auth token, selected tenant, config. No boilerplate compared to Redux. Persists token to localStorage automatically with a plugin.</p>
+      <div style="margin-top:8px;"><span class="ep">zustand</span><span class="ep">zustand/middleware persist</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-w">Tables</span>
+        <strong>TanStack Table v8</strong>
+      </div>
+      <p><strong>Why:</strong> Headless table engine that powers all 11 data grids (users, contracts, clauses, fields). Column sorting, filtering, virtual scrolling for 1000+ row datasets — all without UI library lock-in.</p>
+      <div style="margin-top:8px;"><span class="ep">@tanstack/react-table</span><span class="ep">@tanstack/virtual</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-w">Forms</span>
+        <strong>React Hook Form + Zod</strong>
+      </div>
+      <p><strong>Why:</strong> Zero re-renders on every keystroke (unlike Formik). Zod gives runtime validation that exactly mirrors Leah's API payload requirements — catch payload errors before the API call.</p>
+      <div style="margin-top:8px;"><span class="ep">react-hook-form</span><span class="ep">zod</span><span class="ep">@hookform/resolvers</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-d">CORS proxy</span>
+        <strong>Vite dev proxy / Node.js</strong>
+      </div>
+      <p><strong>Why:</strong> Leah APIs don't have CORS headers for browser requests. Vite's built-in proxy forwards calls in dev. For production, a minimal Express.js reverse proxy handles auth header injection.</p>
+      <div style="margin-top:8px;"><span class="ep">vite proxy config</span><span class="ep">express</span><span class="ep">http-proxy-middleware</span></div>
+    </div>
+
+    <div class="stack-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="tag tag-d">Export</span>
+        <strong>xlsx + jsPDF</strong>
+      </div>
+      <p><strong>Why:</strong> Bulk import templates, user reports, audit exports all need Excel. jsPDF handles certification reports and test results. Both run entirely in the browser — no server needed.</p>
+      <div style="margin-top:8px;"><span class="ep">xlsx (sheetjs)</span><span class="ep">jspdf</span><span class="ep">jspdf-autotable</span></div>
+    </div>
+
+  </div>
+
+  <h3 style="margin-bottom:10px;">Folder structure</h3>
+  <div class="stack-card" style="font-family:var(--font-mono);font-size:12px;line-height:2;color:var(--color-text-secondary);">
+    <div>src/</div>
+    <div style="padding-left:16px;color:var(--color-text-primary);">api/</div>
+    <div style="padding-left:32px;">leahClient.ts &nbsp;&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">— axios instance + token inject</span></div>
+    <div style="padding-left:32px;">contractRequest.ts</div>
+    <div style="padding-left:32px;">users.ts, metadata.ts, ...</div>
+    <div style="padding-left:16px;color:var(--color-text-primary);">features/</div>
+    <div style="padding-left:32px;">contract-edit/ &nbsp;&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">— one folder per tool</span></div>
+    <div style="padding-left:32px;">user-mask/ </div>
+    <div style="padding-left:32px;">metadata-manager/</div>
+    <div style="padding-left:32px;">audit-log/ ...</div>
+    <div style="padding-left:16px;color:var(--color-text-primary);">components/ui/ &nbsp;&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">— shadcn components</span></div>
+    <div style="padding-left:16px;color:var(--color-text-primary);">store/ &nbsp;&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">— zustand: auth, tenant, settings</span></div>
+    <div style="padding-left:16px;color:var(--color-text-primary);">testing/ &nbsp;&nbsp;&nbsp;<span style="color:var(--color-text-secondary);">— scenario runner + reports</span></div>
+  </div>
+
+  <div class="divider"></div>
+  <h3 style="margin-bottom:10px;">Why this stack makes the app feel fast</h3>
+  <ul style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;list-style:none;margin:0;">
+    <li class="met"><strong>TanStack Query cache</strong><p style="font-size:12px;margin-top:3px;">App types, users, field metadata load once and are reused — navigation feels instant.</p></li>
+    <li class="met"><strong>Virtual scrolling</strong><p style="font-size:12px;margin-top:3px;">400 users or 1000 contracts render in &lt;16ms because only visible rows are in the DOM.</p></li>
+    <li class="met"><strong>Optimistic updates</strong><p style="font-size:12px;margin-top:3px;">Unmasking a user or editing a field feels instant — UI updates before the API responds.</p></li>
+    <li class="met"><strong>Zero-config CORS in dev</strong><p style="font-size:12px;margin-top:3px;">Vite proxy means no browser extension or backend needed during development.</p></li>
+  </ul>
+</div>
+</div>
+
+<script>
+const TOOLS = [
+  {
+    id:"mask", name:"User email mask / unmask", icon:"●", cat:"Go-live critical", catcls:"tag-d",
+    summary:"Toggle email masking for all 400+ users in one click instead of 6 hours of manual UI edits.",
+    why:"During implementation, all user emails are prefixed with 'x' (xaaron.brix@pentair.com) so no real notifications fire. Before go-live this must be reversed for all users. The Leah UI does this one user at a time.",
+    achieve:[
+      "Mask all users instantly before UAT begins — zero accidental emails during testing",
+      "Unmask all (or by department) in one click at go-live",
+      "Phased unmask: unmask Legal first, then Sales, then Operations — controlled rollout",
+      "Dry-run preview: see exactly which 396 users will change before confirming",
+      "Certification: download a report proving all users were unmasked at go-live time"
+    ],
+    features:[
+      {hi:true, name:"Bulk mask / unmask", desc:"Single button applies PUT /v1/user/{id} to all matched users in parallel. Shows progress bar per batch of 20."},
+      {hi:true, name:"Department filter", desc:"Select one or more departments. Unmask Legal team first, verify notifications work, then unmask the rest."},
+      {hi:true, name:"Dry-run mode", desc:"See a preview table of exactly which users will change (current email → new email) before any API call is made."},
+      {hi:false, name:"Status dashboard", desc:"Color-coded table: masked (amber), unmasked (green). Count badges show totals per department."},
+      {hi:false, name:"Certification export", desc:"Download timestamped PDF or CSV proving all users were unmasked — for client handover sign-off."},
+      {hi:false, name:"Undo safety", desc:"Re-mask all users in one click if a go-live is delayed or rolled back."}
+    ],
+    endpoints:["GET /v1/user","PUT /v1/user/{id}"]
+  },
+  {
+    id:"contract-edit", name:"Contract quick-edit", icon:"▲", cat:"Built — needs fix", catcls:"tag-w",
+    summary:"Browse any app type, find contracts by Request ID, and update custom fields without navigating the Leah UI. Dropdown values and master data now fixed.",
+    why:"The current version does not show dropdown options or master data lookups (legal party names, user names, department names) when editing a field — the configurator sees a blank text box instead of a select control.",
+    achieve:[
+      "Edit any custom field on any contract in under 3 minutes vs 45 minutes in the Leah UI",
+      "Correct a batch of contracts during UAT without client access needed",
+      "View both Request ID and Record ID on every row — critical for debugging",
+      "Dropdown fields now show the actual allowed values from intake form field groups",
+      "Legal party, user, and department pickers pull live data from master APIs",
+      "Bulk field update: set the same value on 20 contracts at once"
+    ],
+    features:[
+      {hi:true, name:"Dropdown values fixed", desc:"Calls GET /application-type/intake-form-field-groups?SkipFieldOptions=false to load all selectOptions before rendering the edit drawer. Each dropdown field shows its actual options."},
+      {hi:true, name:"Master data pickers", desc:"Legal party field → live search from GET /legal-party. Assignee field → live search from GET /v1/user. Department → GET /department. No more guessing IDs."},
+      {hi:true, name:"Bulk edit mode", desc:"Select multiple contracts from the list, choose a field, set one value → applies PUT /contract-request/{id} to all selected in parallel."},
+      {hi:false, name:"Request ID + Record ID visible", desc:"Both IDs shown prominently in every row header and edit drawer for debugging and audit reference."},
+      {hi:false, name:"Field type detection", desc:"Date pickers for date fields, radio buttons for Yes/No fields, number inputs for currency fields — automatic from metadata type."},
+      {hi:false, name:"Dirty-field tracking", desc:"Shows EDITED badge per changed field. Save button disabled until at least one field is changed. Prevents accidental empty saves."}
+    ],
+    endpoints:["GET /contract-request","GET /contract-request/{id}","PUT /contract-request/{id}","GET /application-type/intake-form-field-groups","GET /legal-party","GET /v1/user","GET /department"]
+  },
+  {
+    id:"audit", name:"Audit log viewer", icon:"◆", cat:"New in stg5", catcls:"tag-g",
+    summary:"Query the full action trail for any contract — who changed what field, when, and from which value to which value.",
+    why:"When a client escalates 'who moved this contract out of Awaiting Approval?' or 'who changed the effective date?', there is currently no way to answer without database access. The POST /AuditLog endpoint in stg5 surfaces this directly.",
+    achieve:[
+      "Answer any 'who changed this?' question in under 60 seconds during a client call",
+      "Prove compliance: demonstrate full chain of custody for any contract",
+      "Identify configuration errors: 'this field keeps getting cleared' becomes traceable",
+      "Support escalation resolution without database access or CPAI support ticket",
+      "Export audit trails as CSV for client compliance reports"
+    ],
+    features:[
+      {hi:true, name:"Contract-scoped query", desc:"Enter a Request ID → see every action on that contract in reverse-chronological order. User, timestamp, action type, field name, old value, new value."},
+      {hi:true, name:"User-scoped query", desc:"See everything a specific user did across all contracts in a date range. Useful for investigating incorrect changes."},
+      {hi:false, name:"Action type filter", desc:"Filter by: field update, status change, assignee change, client added, document uploaded, collaboration started, e-sign sent."},
+      {hi:false, name:"Date range filter", desc:"Narrow to a specific day, week, or custom range. Important for 'what changed during the UAT window?'"},
+      {hi:false, name:"CSV / PDF export", desc:"Download the full audit trail for client compliance documentation or internal post-mortem reports."},
+      {hi:false, name:"Diff view", desc:"For field changes, show old value → new value side by side in a highlighted diff format."}
+    ],
+    endpoints:["POST /AuditLog"]
+  },
+  {
+    id:"approval", name:"Pre-execution approval checker", icon:"▼", cat:"New in stg5", catcls:"tag-g",
+    summary:"See exactly which approval gates must clear before a contract can be sent for e-signature, and their current status.",
+    why:"Contracts that appear ready for signature are often blocked by pre-execution approvals (Finance sign-off, Legal review). Discovering this at the moment of trying to trigger e-sign wastes hours. This tool shows the full approval picture upfront.",
+    achieve:[
+      "Know before attempting e-sign whether all approval conditions are met",
+      "Show clients exactly which approvals are outstanding and who needs to act",
+      "Diagnose 'why is this contract stuck?' in 30 seconds instead of escalating to CPAI",
+      "Dashboard of all contracts blocked by pending approvals — prioritise chase-up",
+      "Verify approval configuration is correct during UAT before go-live"
+    ],
+    features:[
+      {hi:true, name:"Approval requirements view", desc:"GET /contractapproval/preexecution/{requestId} — shows every approval required: approver name, role, condition that triggers it, and current status."},
+      {hi:true, name:"Status check", desc:"GET /contractapproval/preexecutionstatus/{requestId} — real-time: approved, pending, rejected per approval step. Color-coded dashboard."},
+      {hi:false, name:"Blocked contracts list", desc:"Scan all contracts in a given app type and flag any that are blocked by a pending approval. Shows the specific approver who needs to act."},
+      {hi:false, name:"Feature flag check", desc:"GET /contractapproval/is-upcomingapproval-feature-enable — confirm the feature is enabled on this tenant before showing approval UI to avoid confusion."},
+      {hi:false, name:"UAT validation", desc:"Run approval checks on test contracts during UAT to verify the workflow is configured correctly before go-live."}
+    ],
+    endpoints:["GET /contractapproval/preexecution/{requestId}","GET /contractapproval/preexecutionstatus/{requestId}","GET /contractapproval/is-upcomingapproval-feature-enable"]
+  },
+  {
+    id:"legalparty", name:"Legal party manager", icon:"○", cat:"Expanded in stg5", catcls:"tag-w",
+    summary:"Full create/read/update/delete for legal entity records. The PDF only documented GET — stg5 adds the full lifecycle.",
+    why:"Pentair has multiple legal entities (Pentair plc, Pentair Water, regional entities). Each must exist as a legal party in Leah before contracts referencing them can be created. Previously these could only be managed one-at-a-time in the Admin UI.",
+    achieve:[
+      "Create all Pentair legal entities programmatically from an ERP extract",
+      "Update entity details (address, registration number) without the Admin UI",
+      "Bulk delete test/duplicate entities created during configuration",
+      "Validate legalPartyId values before using them in contract payloads",
+      "Search by registration number — confirm the right entity is selected"
+    ],
+    features:[
+      {hi:true, name:"Full CRUD", desc:"Create, read, update, and delete legal party records. POST /legal-party with name, description, registration number, place, full address."},
+      {hi:true, name:"Bulk delete", desc:"POST /legal-party/bulk-delete — pass an array of IDs to clean up test entities created during configuration."},
+      {hi:false, name:"Search and browse", desc:"Search by name, registration number, or place of registration. Filter by active/inactive. Sort by name."},
+      {hi:false, name:"ID clipboard copy", desc:"One-click copy of legalPartyId for pasting directly into contract payloads or bulk import templates."},
+      {hi:false, name:"Active/inactive toggle", desc:"Deactivate a legal party without deleting it — keeps historical contract references intact."},
+      {hi:false, name:"CSV import", desc:"Paste or upload a CSV of legal entities to bulk-create from an ERP extract. Validates required fields before submitting."}
+    ],
+    endpoints:["GET /legal-party","POST /legal-party","GET /legal-party/{id}","PUT /legal-party/{id}","DELETE /legal-party/{id}","POST /legal-party/bulk-delete"]
+  },
+  {
+    id:"metadata", name:"Custom field (metadata) manager", icon:"▪", cat:"New in stg5", catcls:"tag-g",
+    summary:"Create, update, and manage the definitions of all custom fields across every application type — including their dropdown options.",
+    why:"Enterprise CLM implementations require 20–50 custom fields per application type. Each field must be created with the correct type, display name, validation rules, and dropdown options. This was only possible through the Admin UI one field at a time.",
+    achieve:[
+      "Create a full intake form field set for a new application type in 20 minutes instead of 2 hours",
+      "Add, update, or reorder dropdown options on any existing field without touching the UI",
+      "Find a field's customFieldId by display name — essential for building correct PUT payloads",
+      "Identify all unused or misconfigured fields across all app types",
+      "Copy field configuration from one app type to another"
+    ],
+    features:[
+      {hi:true, name:"Field catalogue", desc:"GET /application-type-metadata/list — searchable table of all fields across all app types. Filter by type (Dropdown, Date, Text, Number, RadioButton), app type, or field group."},
+      {hi:true, name:"Add dropdown options", desc:"POST /application-type-metadata/field-options — add a new option to any dropdown field. Set default flag, numeric value for scoring, and display order."},
+      {hi:true, name:"Field type browser", desc:"GET /application-type-metadata/field-types — see all available field types and their configuration options before creating a new field."},
+      {hi:false, name:"Create field", desc:"POST /application-type-metadata — full field creation with type, display name, help text, validation, group assignment, and visibility conditions."},
+      {hi:false, name:"Reference field viewer", desc:"GET /get-reference-field-details — shows reference field values for a specific contract. Essential for debugging fields that pull data from other contracts."},
+      {hi:false, name:"Legal party fields", desc:"GET /application-type-metadata/legalparty/fields — specific to counter-party custom field definitions. Separate from contract-level fields."}
+    ],
+    endpoints:["GET /application-type-metadata/list","GET /application-type-metadata/{id}","POST /application-type-metadata","PUT /application-type-metadata","DELETE /application-type-metadata/{id}","POST /application-type-metadata/field-options","GET /application-type-metadata/field-types"]
+  },
+  {
+    id:"apptype", name:"Application type builder", icon:"▷", cat:"Expanded in stg5", catcls:"tag-w",
+    summary:"Create and configure new contract types programmatically — including feature visibility, CTA buttons, intake form field groups, and AI settings.",
+    why:"Each new client or contract category requires a new application type with specific features enabled/disabled (watermark, AI extraction, CRC review, confidentiality). Configuring this through the Leah Admin UI takes 30+ clicks per app type.",
+    achieve:[
+      "Create a fully configured application type in under 5 minutes from a JSON specification",
+      "Clone an existing app type's configuration as a starting point for a new one",
+      "Bulk-delete test application types created during development",
+      "Verify which features (Task Manager, Translate, Watermark) are enabled per app type",
+      "Configure intake form field group ordering without navigating the UI"
+    ],
+    features:[
+      {hi:true, name:"Create with full config", desc:"POST /application-type with featureVisibility[] (Task Manager, AI, Translate), callToActionVisibility[] (buttons), intakeFormFieldGroup[] (field group ordering and display names)."},
+      {hi:true, name:"AI settings", desc:"Configure isDefaultForRunAi, aiDateExtractionSetting, kOCompareProviderKey, isCrc — all AI extraction settings in one payload."},
+      {hi:false, name:"Browse app types", desc:"GET /application-type with search, pagination, sort. Shows all types with their applicationTypeId, active status, and stage count."},
+      {hi:false, name:"Get by ID", desc:"GET /application-type/{id} — returns full configuration detail including all feature flags. Use to audit current configuration."},
+      {hi:false, name:"Update app type", desc:"PUT /application-type/{id} — modify feature flags, field groups, or AI settings without recreating from scratch."},
+      {hi:false, name:"Bulk delete", desc:"POST /application-type/bulk-delete — clean up test configurations by passing an array of IDs."},
+      {hi:false, name:"Contract templates", desc:"GET /application-type/{id}/contract-template — verify which Word templates are attached to an app type."}
+    ],
+    endpoints:["GET /application-type","POST /application-type","GET /application-type/{id}","PUT /application-type/{id}","DELETE /application-type/{id}","POST /application-type/bulk-delete","GET /application-type/{id}/contract-template"]
+  },
+  {
+    id:"daterule", name:"Date calculation rule manager", icon:"◇", cat:"New in stg5", catcls:"tag-g",
+    summary:"Create, preview, and validate automatic date calculation rules (e.g. Expiry = Start Date + Contract Term) before activating them on real contracts.",
+    why:"Date rules are invisible logic — a misconfigured rule silently sets wrong expiry dates on every new contract. The preview endpoint lets you test a rule against real input values before activating it, preventing a whole class of hard-to-catch errors.",
+    achieve:[
+      "Preview calculated dates (expiry, renewal, notice period) for any start/term combination before the rule is live",
+      "Validate that all date rules for an app type are active and correctly configured",
+      "Debug 'why is this contract showing the wrong expiry date?' by seeing which rule fired",
+      "Create renewal reminder rules (90-day notice) and test them before UAT",
+      "Audit all date rules across all app types from a single screen"
+    ],
+    features:[
+      {hi:true, name:"Rule preview", desc:"POST /date-rules/evaluate-date-calculation-rule — enter a base date and term value, see the exact calculated output date before the rule is activated. No test contract needed."},
+      {hi:true, name:"Executed rules viewer", desc:"GET /date-rules/get-request-executed?requestId=X — see every date rule that fired on a specific contract. Shows rule name, trigger field, and resulting date."},
+      {hi:false, name:"Rule library", desc:"GET /date-rules — list all rules for an app type. Filter by ruleType (calculation, renewal, expiry), fieldKey, and isActive status."},
+      {hi:false, name:"Create rule", desc:"POST /date-rules — define the source date field, operation (add days/months/years), target field, and condition."},
+      {hi:false, name:"Available fields", desc:"GET /date-rules/fields — see which date fields are available as source or target for rules on the current tenant."},
+      {hi:false, name:"Activate / deactivate", desc:"PUT /date-rules/{id} — toggle isActive to enable or disable a rule without deleting it. Safe for staged rollouts."}
+    ],
+    endpoints:["GET /date-rules","POST /date-rules","GET /date-rules/{id}","PUT /date-rules/{id}","POST /date-rules/evaluate-date-calculation-rule","GET /date-rules/get-request-executed","GET /date-rules/fields"]
+  },
+  {
+    id:"report", name:"Custom report builder & scheduler", icon:"▶", cat:"New in stg5", catcls:"tag-g",
+    summary:"Build, schedule, and download report data — contracts expiring in 90 days, pending approvals, open collaborations — without the Leah UI.",
+    why:"Clients need regular reports delivered by email (monthly contract expiry report, quarterly value report). These currently require someone to manually log into Leah, run the report, and export it. The API makes this fully automated.",
+    achieve:[
+      "Build a 'contracts expiring in 90 days' report and schedule it to email the client weekly",
+      "Create a contract value summary by department for the Finance team",
+      "Fetch report data as JSON and push it to SharePoint, Power BI, or SAP Ariba",
+      "Build UAT coverage reports: which contracts were tested, which have been approved",
+      "Export risk rating summary for compliance review"
+    ],
+    features:[
+      {hi:true, name:"Report data API", desc:"GET /custom-report/{reportId}/data — returns paginated, date-filtered report data as structured JSON. Plug directly into any downstream system."},
+      {hi:true, name:"Schedule delivery", desc:"POST /custom-report/schedule-report — configure recurring email delivery (daily/weekly/monthly) to a list of recipients."},
+      {hi:false, name:"Field discovery", desc:"POST /custom-report/fields — get all configurable fields for reporting across selected app types. Shows standard, custom, and important date fields."},
+      {hi:false, name:"Contract status filter", desc:"POST /custom-report/contract-status — returns all valid contract statuses for the selected app type to use as report filters."},
+      {hi:false, name:"Risk rating items", desc:"POST /custom-report/risk-rating-items — include AI risk scores in report filters. Build a report of all high-risk contracts."},
+      {hi:false, name:"CRUD reports", desc:"POST, PUT, DELETE on /custom-report — full lifecycle: create, update, and remove report definitions."}
+    ],
+    endpoints:["POST /custom-report","GET /custom-report/{id}/data","POST /custom-report/schedule-report","POST /custom-report/fields","POST /custom-report/contract-status","POST /custom-report/risk-rating-items"]
+  },
+  {
+    id:"comply", name:"Compare & comply dashboard", icon:"◈", cat:"New in stg5", catcls:"tag-g",
+    summary:"Programmatic access to Leah's AI obligation extraction — view compliance score cards, trigger AI runs, and manage obligation items without opening each contract.",
+    why:"During UAT the team needs to verify that the AI correctly extracts obligations from uploaded contracts and that the playbook configuration matches expectations. This requires opening each contract individually in the Leah UI — the API makes it queryable in bulk.",
+    achieve:[
+      "Run AI obligation extraction on a batch of test contracts and compare results against expected output",
+      "See compliance score cards for all contracts in a single dashboard view",
+      "Identify contracts where AI failed to extract an obligation — pinpoint configuration gaps",
+      "Lock obligations that are verified correct so they can't be accidentally edited",
+      "Get extraction history for any obligation item to understand AI decision evolution"
+    ],
+    features:[
+      {hi:true, name:"Score card view", desc:"GET /compare-comply/score-card?requestId=X — overall compliance score plus per-obligation breakdown: compliant, non-compliant, unreviewed."},
+      {hi:true, name:"Trigger AI on demand", desc:"POST /compare-comply/run-ai — initiate AI obligation extraction for a contract. Essential for testing new playbook configurations immediately."},
+      {hi:false, name:"Tab info", desc:"GET /compare-comply/load-tab?requestId=X — loads the full compare & comply tab context including document file references."},
+      {hi:false, name:"Lock obligations", desc:"POST /compare-comply/request-item/lock?State=true&ItemId=X — lock a verified obligation so it can't be modified. Useful for UAT sign-off."},
+      {hi:false, name:"Edit obligation items", desc:"POST /compare-comply/edit — mark an obligation as compliant, update extracted text, or link/unlink a paragraph."},
+      {hi:false, name:"Extraction history", desc:"GET /compare-comply/extraction-history — full AI decision trail per obligation. Shows what the AI extracted at each run and when it changed."}
+    ],
+    endpoints:["GET /compare-comply/score-card","POST /compare-comply/run-ai","GET /compare-comply/load-tab","POST /compare-comply/request-item/lock","POST /compare-comply/edit","GET /compare-comply/extraction-history"]
+  },
+  {
+    id:"bulk", name:"Bulk import template tool", icon:"▼", cat:"New in stg5", catcls:"tag-g",
+    summary:"Download pre-formatted Excel templates for any app type, validate column headers against live field IDs, and run import dry-runs before committing.",
+    why:"Leah supports bulk contract creation from Excel templates. Each app type needs a different template with the correct custom field columns. Preparing these manually is error-prone — a wrong column name silently ignores the data.",
+    achieve:[
+      "Download a correctly formatted Excel template for any app type in one click",
+      "Validate that every column in a template maps to a real customFieldId",
+      "Run an import dry-run on 5 rows before committing 500",
+      "Identify which template to use for a bulk migration from a legacy system",
+      "Configure how many rows the template pre-fills for a client handover"
+    ],
+    features:[
+      {hi:true, name:"Template download", desc:"GET /bulk-import-template/download?ApplicationTypeId=X&RowCount=100 — downloads an Excel file pre-formatted with all the correct column headers for that app type."},
+      {hi:true, name:"Field ID validation", desc:"Cross-reference template columns against GET /application-type-metadata/list to confirm every column name matches a real customFieldId. Highlights mismatches."},
+      {hi:false, name:"Template library", desc:"GET /bulk-import-template/get-all-bulkimport-template — list all templates that exist in the system with their associated app types."},
+      {hi:false, name:"Contract templates", desc:"GET /application-type/{id}/contract-template — see which contract Word templates are available for an import (IsBulkImport=true filter)."},
+      {hi:false, name:"Create / update templates", desc:"POST and PUT /bulk-import-template — create or modify template definitions in the system."},
+      {hi:false, name:"Bulk delete cleanup", desc:"DELETE /bulk-import-template/delete-bulk-contract-template — remove old or test templates by ID."}
+    ],
+    endpoints:["GET /bulk-import-template/download","GET /bulk-import-template/get-all-bulkimport-template","POST /bulk-import-template","PUT /bulk-import-template/{id}","GET /application-type/{id}/contract-template","DELETE /bulk-import-template/delete-bulk-contract-template"]
+  }
+];
+
+let selTool = TOOLS[0].id;
+
+function buildGrid() {
+  const g = document.getElementById('tool-grid');
+  g.innerHTML = TOOLS.map(t => `
+    <div class="card" onclick="goToTool('${t.id}')" style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:16px;color:var(--color-text-secondary);">${t.icon}</span>
+        <span class="tag ${t.catcls}">${t.cat}</span>
+      </div>
+      <div style="font-size:13px;font-weight:500;">${t.name}</div>
+      <p style="font-size:12px;margin:0;">${t.summary}</p>
+    </div>
+  `).join('');
+}
+
+function buildList() {
+  const l = document.getElementById('tool-list');
+  l.innerHTML = TOOLS.map(t => `
+    <div class="card ${t.id===selTool?'sel':''}" onclick="selectTool('${t.id}')" style="padding:10px 12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:14px;color:var(--color-text-secondary);">${t.icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12.5px;font-weight:500;line-height:1.3;">${t.name}</div>
+          <span class="tag ${t.catcls}" style="margin-top:4px;display:inline-flex;">${t.cat}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderDetail(id) {
+  const t = TOOLS.find(x=>x.id===id);
+  const d = document.getElementById('tool-detail');
+  d.innerHTML = `
+    <div class="detail-panel">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
+        <h3 style="font-size:16px;">${t.name}</h3>
+        <span class="tag ${t.catcls}" style="flex-shrink:0;">${t.cat}</span>
+      </div>
+      <p style="margin-bottom:12px;">${t.summary}</p>
+
+      <div class="divider"></div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Why this exists</div>
+      <p style="margin-bottom:12px;">${t.why}</p>
+
+      <div class="divider"></div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">What you can achieve</div>
+      <ul style="margin-bottom:12px;">${t.achieve.map(a=>`<li style="margin-bottom:4px;">${a}</li>`).join('')}</ul>
+
+      <div class="divider"></div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Features</div>
+      ${t.features.map(f=>`
+        <div class="feat">
+          <div class="feat-dot ${f.hi?'hi':''}"></div>
+          <div>
+            <div style="font-size:13px;font-weight:500;margin-bottom:2px;">${f.name}</div>
+            <p style="font-size:12.5px;">${f.desc}</p>
+          </div>
+        </div>
+      `).join('')}
+
+      <div class="divider"></div>
+      <div style="font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">API endpoints</div>
+      <div>${t.endpoints.map(e=>`<span class="ep">${e}</span>`).join('')}</div>
+    </div>
+  `;
+}
+
+function selectTool(id) {
+  selTool = id;
+  buildList();
+  renderDetail(id);
+}
+
+function goToTool(id) {
+  selTool = id;
+  switchTab('tools');
+  buildList();
+  renderDetail(id);
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const names = ['overview','tools','testing','stack'];
+    t.classList.toggle('on', names[i]===name);
+  });
+  document.querySelectorAll('.section').forEach(s=>{
+    s.classList.toggle('on', s.id===name);
+  });
+}
+
+buildGrid();
+buildList();
+renderDetail(selTool);
+</script>

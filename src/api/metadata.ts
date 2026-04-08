@@ -1,0 +1,206 @@
+import { AxiosInstance } from "axios";
+import {
+  FieldDefinition,
+  FieldOption,
+  FieldTypeInfo,
+  CreateFieldOptionPayload,
+  AddUpdateFieldPayload,
+} from "@/types";
+
+export interface FieldListParams {
+  fieldId?: number;
+  fieldType?: string;
+  fieldName?: string;
+  fieldDisplayName?: string;
+  applicationTypeId?: number;
+  applicationId?: number;
+  metadataType?: string | number;
+  pageIndex?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDescending?: boolean;
+  showOptions?: boolean;
+}
+
+// GET /api/{tenant}/application-type-metadata/list
+export async function listFieldDefinitions(
+  client: AxiosInstance,
+  tenant: string,
+  params?: FieldListParams
+): Promise<{ data: FieldDefinition[]; totalRecords: number }> {
+  const res = await client.get(`/api/${tenant}/application-type-metadata/list`, {
+    params: {
+      PageIndex: params?.pageIndex ?? 1,
+      PageSize: params?.pageSize ?? 100,
+      ShowOptions: params?.showOptions ?? true,
+      ...(params?.applicationTypeId && { ApplicationTypeId: params.applicationTypeId }),
+      ...(params?.fieldType && { FieldType: params.fieldType }),
+      ...(params?.fieldName && { FieldName: params.fieldName }),
+      ...(params?.fieldDisplayName && { FieldDisplayName: params.fieldDisplayName }),
+      ...(params?.metadataType && { MetadataType: params.metadataType }),
+    },
+  });
+  // Leah New Cloud API wraps: { data: { data: [...], totalRecords: N }, statusCode: 200 }
+  const root = res.data?.data ?? res.data;
+  const rawItems: any[] = Array.isArray(root?.data) ? root.data : (Array.isArray(root) ? root : []);
+  const totalRecords: number = root?.totalRecords ?? root?.totalCount ?? rawItems.length;
+
+  const items: FieldDefinition[] = rawItems.map((f: any) => {
+    // Swagger: ApplicationTypeMetadataResponse uses these property names:
+    //   id / fieldId, displayName / fieldDisplayName, fieldTypeName / fieldType, fieldTypeId
+    const fieldId: number = f.fieldId ?? f.id ?? 0;
+    const fieldDisplayName: string = f.fieldDisplayName ?? f.displayName ?? f.fieldName ?? "";
+    const fieldType: string = f.fieldType ?? f.fieldTypeName ?? f.type ?? f.FieldType ?? "";
+    const fieldTypeId: number | undefined = f.fieldTypeId ?? undefined;
+
+    // Swagger: ApplicationTypeMetadataOption uses id + value (not fieldOptionId + fieldOptionValue)
+    const options: FieldOption[] = (f.options ?? []).map((o: any) => ({
+      fieldOptionId:      o.fieldOptionId ?? o.id ?? 0,
+      fieldOptionValue:   o.fieldOptionValue ?? o.value ?? o.optionName ?? o.name ?? "",
+      isDefault:          o.isDefault ?? false,
+      isActive:           o.isActive ?? true,
+      parentId:           o.parentId ?? null,
+      numericValue:       o.numericValue ?? null,
+      fieldOptionOrderId: o.fieldOptionOrderId ?? o.optionOrderId ?? 0,
+    }));
+
+    return {
+      ...f,
+      fieldId,
+      fieldDisplayName,
+      fieldType,
+      fieldTypeId,
+      isRequired:    f.isRequired ?? f.isMandatoryField ?? false,
+      isMandatoryField: f.isMandatoryField ?? f.isRequired ?? false,
+      options: options.length > 0 ? options : (f.options ?? []),
+    };
+  });
+
+  return { data: items, totalRecords };
+}
+
+// GET /api/{tenant}/application-type-metadata/{id}
+export async function getFieldById(
+  client: AxiosInstance,
+  tenant: string,
+  id: number
+): Promise<FieldDefinition> {
+  const res = await client.get(`/api/${tenant}/application-type-metadata/${id}`);
+  const raw = res.data?.data ?? res.data;
+  const f = raw;
+  return {
+    ...f,
+    fieldId:         f.fieldId ?? f.id ?? id,
+    fieldDisplayName:f.fieldDisplayName ?? f.displayName ?? f.fieldName ?? "",
+    fieldType:       f.fieldType ?? f.fieldTypeName ?? "",
+    fieldTypeId:     f.fieldTypeId ?? undefined,
+    isRequired:      f.isRequired ?? f.isMandatoryField ?? false,
+    isMandatoryField:f.isMandatoryField ?? f.isRequired ?? false,
+    options: (f.options ?? []).map((o: any) => ({
+      fieldOptionId:      o.fieldOptionId ?? o.id ?? 0,
+      fieldOptionValue:   o.fieldOptionValue ?? o.value ?? "",
+      isDefault:          o.isDefault ?? false,
+      isActive:           o.isActive ?? true,
+      parentId:           o.parentId ?? null,
+      numericValue:       o.numericValue ?? null,
+      fieldOptionOrderId: o.fieldOptionOrderId ?? 0,
+    })),
+  };
+}
+
+// GET /api/{tenant}/application-type-metadata/field-types
+export async function listFieldTypes(
+  client: AxiosInstance,
+  tenant: string,
+  metadataType?: string | number
+): Promise<FieldTypeInfo[]> {
+  const res = await client.get(`/api/${tenant}/application-type-metadata/field-types`, {
+    params: metadataType ? { metaDataType: metadataType } : undefined,
+  });
+  const raw = res.data?.data ?? res.data ?? [];
+  const arr: any[] = Array.isArray(raw) ? raw : [];
+
+  // Swagger: ApplicationMetaDataTypeFieldTypeResponseModel — fieldTypeId + fieldTypeName
+  return arr.map((ft: any) => ({
+    fieldTypeId:   ft.fieldTypeId ?? ft.id ?? ft.fieldType ?? 0,
+    fieldTypeName: ft.fieldTypeName ?? ft.name ?? ft.displayName ?? ft.fieldType ?? "",
+  }));
+}
+
+// POST /api/{tenant}/application-type-metadata/field-options
+export async function addFieldOption(
+  client: AxiosInstance,
+  tenant: string,
+  payload: CreateFieldOptionPayload
+): Promise<number> {
+  const res = await client.post(`/api/${tenant}/application-type-metadata/field-options`, payload);
+  return res.data?.data ?? res.data;
+}
+
+// DELETE /api/{tenant}/application-type-metadata/field-options/{id}
+export async function deleteFieldOption(
+  client: AxiosInstance,
+  tenant: string,
+  optionId: number
+): Promise<void> {
+  await client.delete(`/api/${tenant}/application-type-metadata/field-options/${optionId}`);
+}
+
+// PUT /api/{tenant}/application-type-metadata/field-options/{id}/set-default
+// (some API versions use a different endpoint — try both)
+export async function setDefaultFieldOption(
+  client: AxiosInstance,
+  tenant: string,
+  optionId: number,
+  fieldId: number
+): Promise<void> {
+  // Try patch-style update by re-POSTing the option with isDefault: true
+  await client.put(
+    `/api/${tenant}/application-type-metadata/field-options/${optionId}`,
+    { id: optionId, fieldId, isDefault: true, isActive: true }
+  );
+}
+
+// POST /api/{tenant}/application-type-metadata — create field
+export async function createFieldDefinition(
+  client: AxiosInstance,
+  tenant: string,
+  payload: AddUpdateFieldPayload
+): Promise<number> {
+  const res = await client.post(`/api/${tenant}/application-type-metadata`, payload);
+  return res.data?.data ?? res.data;
+}
+
+// PUT /api/{tenant}/application-type-metadata — update field
+export async function updateFieldDefinition(
+  client: AxiosInstance,
+  tenant: string,
+  payload: AddUpdateFieldPayload
+): Promise<void> {
+  await client.put(`/api/${tenant}/application-type-metadata`, payload);
+}
+
+// DELETE /api/{tenant}/application-type-metadata/{id}
+export async function deleteFieldDefinition(
+  client: AxiosInstance,
+  tenant: string,
+  id: number
+): Promise<void> {
+  await client.delete(`/api/${tenant}/application-type-metadata/${id}`);
+}
+
+// GET /api/{tenant}/application-type-metadata/legalparty/fields
+export async function listLegalPartyFields(
+  client: AxiosInstance,
+  tenant: string,
+  params?: FieldListParams
+): Promise<{ data: FieldDefinition[] }> {
+  const res = await client.get(`/api/${tenant}/application-type-metadata/legalparty/fields`, {
+    params: {
+      PageIndex: params?.pageIndex ?? 1,
+      PageSize: params?.pageSize ?? 100,
+      ...(params?.applicationTypeId && { ApplicationTypeId: params.applicationTypeId }),
+    },
+  });
+  return res.data;
+}
