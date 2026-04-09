@@ -159,13 +159,12 @@ export default function BulkTestCreatorPage() {
   });
 
   // Look up a reliable default client ID that actually exists in this tenant
-  // Because the direct /Client endpoint throws 500 CORS errors in QA, we bypass it
-  // by querying the robust listContracts API and stealing the first client ID we see.
+  // By querying the robust listContracts API via newCloud and grabbing the first Client ID used in reality.
   const { data: defaultClientId } = useQuery({
-    queryKey: ["defaultClient", tenant],
+    queryKey: ["defaultClient", tenant, "v2"], // forced cache invalidation
     queryFn: async () => {
       try {
-        const res = await listContracts(clients!.oldProd, tenant, { PageNumber: 1, PageSize: 10 });
+        const res = await listContracts(clients!.newCloud, tenant, { PageNumber: 1, PageSize: 10 });
         if (res.data && res.data.length > 0) {
           for (const contract of res.data) {
             if (contract.clients && contract.clients.length > 0) {
