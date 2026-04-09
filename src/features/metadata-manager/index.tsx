@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PageHeader, Spinner, ErrorAlert } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
@@ -1313,59 +1314,84 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
                 <GitBranch size={9} /> Visibility Conditions ({conditions.length})
               </p>
-              <div className="space-y-1.5">
-                {conditions.map((cond, ci) => {
-                  if (!cond) return null;
-                  const logicalOp = cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : "");
-                  let fieldNameOrObj = cond?.conditionFieldName || cond?.fieldName || cond?.fieldLabel || cond?.field || cond?.id || "?";
-                  
-                  // In some complex querybuilder rules, cond.field is a full object!
-                  let fieldName = "?";
-                  if (typeof fieldNameOrObj === 'string' || typeof fieldNameOrObj === 'number') {
-                    fieldName = String(fieldNameOrObj);
-                  } else if (typeof fieldNameOrObj === 'object' && fieldNameOrObj !== null) {
-                    fieldName = String(fieldNameOrObj.displayName || fieldNameOrObj.label || fieldNameOrObj.id || JSON.stringify(fieldNameOrObj));
-                  }
+               <TooltipProvider>
+                <div className="space-y-2">
+                  {conditions.map((cond, ci) => {
+                    if (!cond) return null;
+                    const logicalOp = cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : "");
+                    let fieldNameOrObj = cond?.conditionFieldName || cond?.fieldName || cond?.fieldLabel || cond?.field || cond?.id || "?";
+                    
+                    let fieldName = "?";
+                    if (typeof fieldNameOrObj === 'string' || typeof fieldNameOrObj === 'number') {
+                      fieldName = String(fieldNameOrObj);
+                    } else if (typeof fieldNameOrObj === 'object' && fieldNameOrObj !== null) {
+                      fieldName = String(fieldNameOrObj.displayName || fieldNameOrObj.label || fieldNameOrObj.id || JSON.stringify(fieldNameOrObj));
+                    }
 
-                  const fieldId = cond?.conditionFieldId || cond?.fieldId || (typeof cond?.field === 'object' ? cond?.field?.id : undefined);
-                  const operator = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
-                  
-                  let valStr = "";
-                  if (Array.isArray(cond?.value)) {
-                    valStr = cond.value.join(", ");
-                  } else if (typeof cond?.value === 'object' && cond?.value !== null) {
-                    valStr = JSON.stringify(cond.value);
-                  } else {
-                    valStr = String(cond?.conditionValue ?? cond?.value ?? "");
-                  }
+                    const rawFieldId = String(cond?.conditionFieldId || cond?.fieldId || (typeof cond?.field === 'object' ? cond?.field?.id : ""));
+                    const fieldId = rawFieldId.replace(/[^0-9]/g, '') || rawFieldId; // Strip F600 prefixes commonly used by QueryBuilder if possible
+                    
+                    const operatorStr = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
 
-                  return (
-                    <div key={ci} className="bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2 text-[11px] font-mono">
-                      <div className="flex items-start gap-2 flex-wrap mb-1.5">
-                        {ci > 0 && <span className="text-violet-300 font-bold text-[9px] uppercase">{logicalOp}</span>}
-                        <span className="text-muted-foreground mr-1">Field</span>
-                        <span className="text-violet-300 font-bold px-1.5 py-0.5 bg-violet-500/10 rounded">{fieldName}</span>
-                        {fieldId && <span className="text-muted-foreground/50 text-[9px]">#{fieldId}</span>}
-                        <span className="text-amber-400 font-bold mx-1">{operator}</span>
-                        <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded break-all">"{valStr}"</span>
-                      </div>
-                      
-                      {(!cond?.operator && !cond?.field && !cond?.fieldName) && (
-                        <div className="mt-2 p-2 bg-black/40 rounded text-[9px] text-muted-foreground break-all overflow-hidden border border-white/5">
-                          <span className="text-white/40 mb-1 block">RAW CONDITION:</span>
-                          {JSON.stringify(cond)}
-                        </div>
-                      )}
+                    // Brutal value extraction engine to catch deeply nested querybuilder formats
+                    let valStr = "";
+                    const rv = cond?.valueDisplay ?? cond?.displayValue ?? cond?.conditionValue ?? cond?.value ?? cond?.val;
+                    
+                    if (Array.isArray(rv)) {
+                      valStr = rv.map(x => typeof x === 'object' && x !== null ? (x.label || x.name || x.id || x.value || JSON.stringify(x)) : String(x)).join(', ');
+                    } else if (typeof rv === 'object' && rv !== null) {
+                      valStr = String(rv.label || rv.name || rv.id || rv.value || JSON.stringify(rv));
+                    } else {
+                      valStr = String(rv ?? "");
+                    }
+                    
+                    if (!valStr || valStr.trim() === "") valStr = "<Empty>";
 
-                      {cond?.action && (
-                        <div className="mt-1 text-[10px] text-muted-foreground/60 border-t border-white/5 pt-1">
-                          <span className="text-white/40">ACTION →</span> {cond.action}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                    return (
+                      <Tooltip key={ci} delayDuration={300}>
+                        <TooltipTrigger asChild>
+                          <div className="bg-background/40 hover:bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 rounded-lg px-3 py-2 text-[11px] font-mono transition-colors cursor-help group/cond">
+                            <div className="flex items-start gap-2 flex-wrap mb-1">
+                              {ci > 0 && <span className="text-violet-300 font-bold text-[9px] uppercase tracking-widest bg-violet-500/20 px-1.5 rounded">{logicalOp}</span>}
+                              
+                              <span className="text-muted-foreground mr-1 mt-0.5">Field</span>
+                              
+                              <span className="text-violet-300 font-bold px-1.5 py-0.5 bg-violet-500/10 rounded border border-violet-500/20 group-hover/cond:border-violet-500/40 transition-colors">
+                                {fieldName}
+                              </span>
+                              
+                              {fieldId && (
+                                <span className="text-muted-foreground/40 text-[9px] mt-0.5" title="Field ID">#{fieldId}</span>
+                              )}
+                              
+                              <span className="text-amber-400 font-bold mx-1 mt-0.5 tracking-wider">{operatorStr}</span>
+                              
+                              <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 break-all group-hover/cond:border-emerald-500/40 transition-colors">
+                                {valStr !== "<Empty>" ? `"${valStr}"` : <span className="opacity-50 italic">empty</span>}
+                              </span>
+                            </div>
+
+                            {cond?.action && (
+                              <div className="mt-2 text-[10px] text-muted-foreground/60 border-t border-white/5 pt-1.5 flex items-center gap-1.5">
+                                <span className="text-white/40 font-bold tracking-widest text-[9px]">ACTION</span> 
+                                <span className="bg-white/5 px-1.5 rounded text-white/70">{cond.action}</span>
+                              </div>
+                            )}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" sideOffset={10} className="w-[300px] bg-black border-white/10 p-0 overflow-hidden shadow-2xl">
+                          <div className="bg-violet-500/10 px-3 py-1.5 border-b border-white/10">
+                            <p className="text-[10px] font-bold text-violet-300 uppercase tracking-widest">Internal Logic Node Schema</p>
+                          </div>
+                          <div className="p-3 text-[10px] font-mono text-muted-foreground whitespace-pre-wrap break-all max-h-[300px] overflow-auto">
+                            {JSON.stringify(cond, null, 2)}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </TooltipProvider>
               <p className="text-[9px] text-muted-foreground/40 mt-1.5">
                 This field shows/hides based on the conditions above. Edit via the Leah CLM UI to modify conditions.
               </p>
