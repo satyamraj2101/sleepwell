@@ -1328,24 +1328,43 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                       fieldName = String(fieldNameOrObj.displayName || fieldNameOrObj.label || fieldNameOrObj.id || JSON.stringify(fieldNameOrObj));
                     }
 
-                    const rawFieldId = String(cond?.conditionFieldId || cond?.fieldId || (typeof cond?.field === 'object' ? cond?.field?.id : ""));
-                    const fieldId = rawFieldId.replace(/[^0-9]/g, '') || rawFieldId; // Strip F600 prefixes commonly used by QueryBuilder if possible
-                    
-                    const operatorStr = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
-
-                    // Brutal value extraction engine to catch deeply nested querybuilder formats
-                    let valStr = "";
-                    const rv = cond?.valueDisplay ?? cond?.displayValue ?? cond?.conditionValue ?? cond?.value ?? cond?.val;
-                    
-                    if (Array.isArray(rv)) {
-                      valStr = rv.map(x => typeof x === 'object' && x !== null ? (x.label || x.name || x.id || x.value || JSON.stringify(x)) : String(x)).join(', ');
-                    } else if (typeof rv === 'object' && rv !== null) {
-                      valStr = String(rv.label || rv.name || rv.id || rv.value || JSON.stringify(rv));
-                    } else {
-                      valStr = String(rv ?? "");
+                    const rawFieldIdStr = String(cond?.conditionFieldId || cond?.fieldId || (typeof cond?.field === 'object' ? cond?.field?.id : "") || "");
+                    // Leah QueryBuilder uses 'F600NNN' as internal IDs where NNN is actual field ID 
+                    // e.g. F600371 → field ID is 371
+                    let fieldId = rawFieldIdStr;
+                    const leahPrefixMatch = rawFieldIdStr.match(/^F?6?0*([1-9]\d*)$/i);
+                    if (leahPrefixMatch) {
+                      fieldId = leahPrefixMatch[1];
+                    } else if (rawFieldIdStr.match(/^\d+$/)) {
+                      fieldId = rawFieldIdStr; // pure numeric, already clean
                     }
                     
-                    if (!valStr || valStr.trim() === "") valStr = "<Empty>";
+                    const operatorStr = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
+                    
+                    // Some operators don't need a value (null checks, existence checks)
+                    const noValueOperators = ['ISNOTNULL', 'ISNULL', 'IS NOT NULL', 'IS NULL', 'IS EMPTY', 'IS NOT EMPTY', 'EXISTS', 'NOT EXISTS'];
+                    const operatorNeedsNoValue = noValueOperators.some(op => operatorStr.includes(op));
+
+                    // Robust value extraction — supports nested querybuilder formats
+                    let valStr = "";
+                    if (!operatorNeedsNoValue) {
+                      // Try valueDisplay first (human-readable labels), then fall back to raw value
+                      const displayRV = cond?.valueDisplay ?? cond?.displayValue;
+                      const rawRV = cond?.conditionValue ?? cond?.value ?? cond?.val;
+                      const rv = (displayRV !== undefined && displayRV !== null && displayRV !== '' && !(Array.isArray(displayRV) && displayRV.length === 0))
+                        ? displayRV : rawRV;
+
+                      if (Array.isArray(rv) && rv.length > 0) {
+                        valStr = rv.map((x: any) => typeof x === 'object' && x !== null 
+                          ? String(x.label || x.displayValue || x.name || x.id || x.value || JSON.stringify(x)) 
+                          : String(x)
+                        ).join(', ');
+                      } else if (typeof rv === 'object' && rv !== null && !Array.isArray(rv)) {
+                        valStr = String((rv as any).label || (rv as any).displayValue || (rv as any).name || (rv as any).id || (rv as any).value || JSON.stringify(rv));
+                      } else if (rv !== null && rv !== undefined && rv !== '' && !(Array.isArray(rv) && rv.length === 0)) {
+                        valStr = String(rv);
+                      }
+                    }
 
                     return (
                       <Tooltip key={ci} delayDuration={300}>
@@ -1361,14 +1380,20 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                               </span>
                               
                               {fieldId && (
-                                <span className="text-muted-foreground/40 text-[9px] mt-0.5" title="Field ID">#{fieldId}</span>
+                                <span className="text-muted-foreground/40 text-[9px] mt-0.5" title={`Raw: ${rawFieldIdStr}`}>#{fieldId}</span>
                               )}
                               
                               <span className="text-amber-400 font-bold mx-1 mt-0.5 tracking-wider">{operatorStr}</span>
                               
-                              <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 break-all group-hover/cond:border-emerald-500/40 transition-colors">
-                                {valStr !== "<Empty>" ? `"${valStr}"` : <span className="opacity-50 italic">empty</span>}
-                              </span>
+                              {!operatorNeedsNoValue && (
+                                <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 break-all group-hover/cond:border-emerald-500/40 transition-colors">
+                                  {valStr ? `"${valStr}"` : <span className="opacity-40 italic text-[10px]">any value</span>}
+                                </span>
+                              )}
+                              
+                              {operatorNeedsNoValue && (
+                                <span className="text-sky-400/60 text-[9px] italic mt-0.5">(no value needed)</span>
+                              )}
                             </div>
 
                             {cond?.action && (
