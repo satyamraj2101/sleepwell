@@ -159,17 +159,19 @@ export default function BulkTestCreatorPage() {
   });
 
   // Look up a reliable default client ID that actually exists in this tenant
-  // By querying the robust listContracts API via newCloud and grabbing the first Client ID used in reality.
+  // By querying the robust listContracts API, fetching the first contract's detail, and perfectly extracting the client ID.
   const { data: defaultClientId } = useQuery({
-    queryKey: ["defaultClient", tenant, "v2"], // forced cache invalidation
+    queryKey: ["defaultClient", tenant, "v3"], // forced cache invalidation
     queryFn: async () => {
       try {
         const res = await listContracts(clients!.newCloud, tenant, { PageNumber: 1, PageSize: 10 });
         if (res.data && res.data.length > 0) {
-          for (const contract of res.data) {
-            if (contract.clients && contract.clients.length > 0) {
-              return contract.clients[0].clientId || (contract.clients[0] as any).id || 1;
-            }
+          const firstId = res.data[0].id || res.data[0].recordId;
+          if (firstId) {
+             const detail = await getContractDetail(clients!.newCloud, tenant, Number(firstId));
+             if (detail && detail.clients && detail.clients.length > 0) {
+                return detail.clients[0].clientId || 1;
+             }
           }
         }
       } catch (e) {
