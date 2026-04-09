@@ -239,6 +239,7 @@ export default function BulkTestCreatorPage() {
       const payload: any = {
         id: 0,
         applicationTypeId: run.appTypeId,
+        requestTypeId: 1, // 1 = New Contract Request
         recordId: 0,
         isUploadedContract: false,
         requestorUsername: username,
