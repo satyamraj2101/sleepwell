@@ -344,7 +344,9 @@ export default function BulkTestCreatorPage() {
         contractPriority: { priority: false, priorityReason: "" },
         recordClassificationId: 0,
         integrationId: [],
-        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [{ clientId: defaultClientId ?? 1, isPrimary: true }],
+        clients: clientIdVal 
+          ? [{ clientId: clientIdVal, clientName: "", isPrimary: true, addressDetailId: null, contactNumberDetailId: null, emailDetailId: null, contactNameDetailId: null, roleId: null, customFields: [] }] 
+          : [{ clientId: defaultClientId ?? 1, clientName: "", isPrimary: true, addressDetailId: null, contactNumberDetailId: null, emailDetailId: null, contactNameDetailId: null, roleId: null, customFields: [] }],
         confidentialRecords: [],
         customFields: safeCustomFields,
       };
