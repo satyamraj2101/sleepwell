@@ -147,6 +147,21 @@ export default function BulkTestCreatorPage() {
     staleTime: 10 * 60_000,
   });
 
+  // Look up a reliable default client ID that actually exists in this tenant
+  const { data: defaultClientId } = useQuery({
+    queryKey: ["defaultClient", tenant],
+    queryFn: async () => {
+      try {
+        const res = await clients!.oldProd.get(`/api/${tenant}/Client`, { params: { PageNo: 1, PerPage: 1 } });
+        const list = res.data?.data ?? res.data?.results ?? res.data;
+        if (Array.isArray(list) && list.length > 0) return list[0].clientId || list[0].id || 1;
+      } catch { return 1; }
+      return 1;
+    },
+    enabled: !!clients,
+    staleTime: 60 * 60_000,
+  });
+
   // Load app types
   const { data: appTypesRaw = [] } = useQuery({
     queryKey: QK.appTypes(tenant),
@@ -168,18 +183,19 @@ export default function BulkTestCreatorPage() {
 
   // Flatten all intake fields
   const allIntakeFields = useMemo(() => {
-    const out: Array<{ fieldId: number; fieldName: string; fieldType: string; selectOptions?: Record<string, string> | null; isMandatory?: boolean, groupType?: string }> = [];
+    const out: Array<{ fieldId: number; fieldName: string; fieldType: string; selectOptions?: Record<string, string> | null; isMandatory?: boolean, groupType?: string, groupName?: string }> = [];
     for (const g of intakeGroups) {
       const type = (g as any).groupType || "Custom";
+      const name = (g as any).groupName || (g as any).displayName || "";
       const sections = (g as any).sections ?? [];
       for (const s of sections) {
         for (const f of (s.fields ?? [])) {
-          out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type });
+          out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type, groupName: name });
         }
       }
       // Some versions have fields directly on group
       for (const f of ((g as any).fields ?? [])) {
-        out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type });
+        out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type, groupName: name });
       }
     }
     return out.filter(f => f.fieldId);
@@ -245,6 +261,7 @@ export default function BulkTestCreatorPage() {
       // Only send simple (non-table) custom fields.
       // We explicitly exclude Standard group fields as they map to core properties.
       const safeCustomFields: any[] = [];
+      const KNOWN_CORE_RESERVED_IDS = 100; // In Leah, anything < 100 is almost certainly a Core field leaking into Custom Fields payload.
       
       Object.entries(run.customFieldValues).forEach(([k, v]) => {
         if (v === "" || v === null || v === undefined) return;
@@ -257,7 +274,7 @@ export default function BulkTestCreatorPage() {
         
         // 1. Intercept Core Properties from Intake Form
         if (name === "client" || name === "clients" || name === "client name") {
-          clientIdVal = Number(v) || 1; // fallback to 1 if dummy string
+          clientIdVal = Number(v) || defaultClientId || 1;
           return;
         }
         
@@ -269,8 +286,16 @@ export default function BulkTestCreatorPage() {
         // 2. Safely Exclude Table fields
         if (fieldDef.fieldType?.toLowerCase() === "table") return;
 
-        // 3. Exclude Standard Group (Core Leah Properties returned in Intake)
-        if (fieldDef.groupType === "Standard") return;
+        // 3. Ultra-Aggressive EXCLUSION of Core Fields
+        // This is necessary because some Application Types aggressively pack core
+        // attributes into the CustomFields intake form API, but then violently reject
+        // them if they are passed within the 'customFields' POST payload array.
+        if (fieldDef.groupType === "Standard" || fieldDef.groupType === "System") return;
+        if ((fieldDef.groupName || "").toLowerCase().includes("record detail")) return;
+        if ((fieldDef as any).isSystemField === true || String((fieldDef as any).metaDataType).toLowerCase() === "system") return;
+        
+        // Final fallback: Core fields in Leah virtually never exceed ID 100. True custom metadata does.
+        if (Number(k) < KNOWN_CORE_RESERVED_IDS) return;
 
         // Otherwise, it is a valid runtime Custom Field
         safeCustomFields.push({ customFieldId: Number(k), customFieldValue: String(v) });
@@ -301,7 +326,7 @@ export default function BulkTestCreatorPage() {
         contractPriority: { priority: false, priorityReason: "" },
         recordClassificationId: 0,
         integrationId: [],
-        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [{ clientId: 1, isPrimary: true }],
+        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [{ clientId: defaultClientId ?? 1, isPrimary: true }],
         confidentialRecords: [],
         customFields: safeCustomFields,
       };
