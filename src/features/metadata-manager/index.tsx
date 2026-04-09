@@ -520,7 +520,9 @@ function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption,
         {/* Name + API name */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-[13px] font-medium text-foreground truncate">{f.fieldDisplayName || f.fieldName}</span>
+            <span className={cn("text-[13px] font-medium text-foreground truncate", !f.isActive && "opacity-50 line-through")}>
+               {f.fieldDisplayName || f.fieldName}
+            </span>
             {isMissing && <AlertTriangle size={10} className="text-red-400 flex-shrink-0" />}
           </div>
           <p className="text-[10px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
@@ -1224,7 +1226,9 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-medium">{f.displayName || f.fieldName}</span>
+            <span className={cn("text-sm font-medium", (f as any).isActive === false && "opacity-50 line-through")}>
+               {f.displayName || f.fieldName}
+            </span>
             {f.isRequired && (
               <span className="text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Required</span>
             )}
@@ -1310,50 +1314,48 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                 <GitBranch size={9} /> Visibility Conditions ({conditions.length})
               </p>
               <div className="space-y-1.5">
-                {conditions.map((cond, ci) => (
-                  <div key={ci} className="bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2 text-[11px] font-mono">
-                    <div className="flex items-start gap-2 flex-wrap mb-1.5">
-                      {ci > 0 && (
-                        <span className="text-violet-300 font-bold text-[9px] uppercase">{(cond as any).logicalOperator || (cond as any).condition || "AND"}</span>
+                {conditions.map((cond, ci) => {
+                  if (!cond) return null;
+                  const logicalOp = cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : "");
+                  const fieldName = cond?.conditionFieldName || cond?.fieldName || cond?.fieldLabel || cond?.field || cond?.id || "?";
+                  const fieldId = cond?.conditionFieldId || cond?.fieldId;
+                  const operator = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
+                  
+                  let valStr = "";
+                  if (Array.isArray(cond?.value)) {
+                    valStr = cond.value.join(", ");
+                  } else if (typeof cond?.value === 'object' && cond?.value !== null) {
+                    valStr = JSON.stringify(cond.value);
+                  } else {
+                    valStr = String(cond?.conditionValue ?? cond?.value ?? "");
+                  }
+
+                  return (
+                    <div key={ci} className="bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2 text-[11px] font-mono">
+                      <div className="flex items-start gap-2 flex-wrap mb-1.5">
+                        {ci > 0 && <span className="text-violet-300 font-bold text-[9px] uppercase">{logicalOp}</span>}
+                        <span className="text-muted-foreground mr-1">Field</span>
+                        <span className="text-violet-300 font-bold px-1.5 py-0.5 bg-violet-500/10 rounded">{fieldName}</span>
+                        {fieldId && <span className="text-muted-foreground/50 text-[9px]">#{fieldId}</span>}
+                        <span className="text-amber-400 font-bold mx-1">{operator}</span>
+                        <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded break-all">"{valStr}"</span>
+                      </div>
+                      
+                      {(!cond?.operator && !cond?.field && !cond?.fieldName) && (
+                        <div className="mt-2 p-2 bg-black/40 rounded text-[9px] text-muted-foreground break-all overflow-hidden border border-white/5">
+                          <span className="text-white/40 mb-1 block">RAW CONDITION:</span>
+                          {JSON.stringify(cond)}
+                        </div>
                       )}
-                      
-                      <span className="text-muted-foreground mr-1">Field</span>
-                      <span className="text-violet-300 font-bold px-1.5 py-0.5 bg-violet-500/10 rounded">
-                        {(cond as any).conditionFieldName || (cond as any).fieldName || (cond as any).fieldLabel || (cond as any).field || (cond as any).id || "?"}
-                      </span>
-                      {/* Sub id if available */}
-                      {((cond as any).conditionFieldId || (cond as any).fieldId) && (
-                         <span className="text-muted-foreground/50 text-[9px]">#{((cond as any).conditionFieldId || (cond as any).fieldId)}</span>
+
+                      {cond?.action && (
+                        <div className="mt-1 text-[10px] text-muted-foreground/60 border-t border-white/5 pt-1">
+                          <span className="text-white/40">ACTION →</span> {cond.action}
+                        </div>
                       )}
-                      
-                      <span className="text-amber-400 font-bold mx-1">
-                        {String((cond as any).operator ?? (cond as any).conditionType ?? "=").toUpperCase().replace(/_/g, ' ')}
-                      </span>
-                      
-                      <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded break-all">
-                        "{Array.isArray((cond as any).value) 
-                           ? (cond as any).value.join(", ") 
-                           : (typeof (cond as any).value === 'object' && (cond as any).value !== null 
-                                ? JSON.stringify((cond as any).value) 
-                                : String((cond as any).conditionValue ?? (cond as any).value ?? ""))}"
-                      </span>
                     </div>
-
-                    {/* Developer visibility fallback if essential data is missing */}
-                    {!(cond as any).operator && !(cond as any).field && !(cond as any).fieldName && (
-                      <div className="mt-2 p-2 bg-black/40 rounded text-[9px] text-muted-foreground break-all overflow-hidden border border-white/5">
-                        <span className="text-white/40 mb-1 block">RAW CONDITION:</span>
-                        {JSON.stringify(cond)}
-                      </div>
-                    )}
-
-                    {(cond as any).action && (
-                      <div className="mt-1 text-[10px] text-muted-foreground/60 border-t border-white/5 pt-1">
-                        <span className="text-white/40">ACTION →</span> {(cond as any).action}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <p className="text-[9px] text-muted-foreground/40 mt-1.5">
                 This field shows/hides based on the conditions above. Edit via the Leah CLM UI to modify conditions.
