@@ -1195,7 +1195,19 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
 }) {
   const tc = typeColor(f.fieldType ?? (f as any).type ?? "");
   const ft = f.fieldType ?? (f as any).type ?? "";
-  const conditions = Array.isArray(f.visibilityConditions) ? f.visibilityConditions : [];
+  
+  let conditions: any[] = [];
+  if (Array.isArray(f.visibilityConditions)) {
+    conditions = f.visibilityConditions;
+  } else if ((f as any).visibilityConditionObject?.rules) {
+    conditions = (f as any).visibilityConditionObject.rules;
+  } else if (typeof (f as any).visibilityConditions === 'string' && ((f as any).visibilityConditions as string).startsWith('{')) {
+    try {
+      const parsed = JSON.parse((f as any).visibilityConditions);
+      if (parsed && Array.isArray(parsed.rules)) conditions = parsed.rules;
+    } catch(e) {}
+  }
+  
   const hasConditions = conditions.length > 0;
   const selectOptCount = f.selectOptions ? Object.keys(f.selectOptions).length : 0;
 
@@ -1302,17 +1314,17 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                   <div key={ci} className="bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2 text-[11px] font-mono">
                     <div className="flex items-start gap-2 flex-wrap">
                       {ci > 0 && (
-                        <span className="text-violet-300 font-bold text-[9px] uppercase">{(cond as any).logicalOperator || "AND"}</span>
+                        <span className="text-violet-300 font-bold text-[9px] uppercase">{(cond as any).logicalOperator || (cond as any).condition || "AND"}</span>
                       )}
                       <span className="text-muted-foreground">
                         Field <span className="text-violet-300 font-semibold">#{(cond as any).conditionFieldId ?? (cond as any).fieldId ?? "?"}</span>
-                        {(cond as any).conditionFieldName && (
-                          <span className="text-foreground/70"> ({(cond as any).conditionFieldName})</span>
+                        {((cond as any).conditionFieldName || (cond as any).fieldName) && (
+                          <span className="text-foreground/70"> ({(cond as any).conditionFieldName || (cond as any).fieldName})</span>
                         )}
                       </span>
                       <span className="text-amber-300 font-semibold">{(cond as any).operator ?? (cond as any).conditionType ?? "="}</span>
                       <span className="text-emerald-300">
-                        "{(cond as any).conditionValue ?? (cond as any).value ?? ""}"
+                        "{Array.isArray((cond as any).value) ? (cond as any).value.join(", ") : ((cond as any).conditionValue ?? (cond as any).value ?? "")}"
                       </span>
                     </div>
                     {(cond as any).action && (
