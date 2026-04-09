@@ -63,16 +63,27 @@ function dummyValueForFieldType(fieldName: string, fieldType: string, options?: 
   const ft = (fieldType ?? "").toLowerCase().replace(/\s/g, "");
   const fn = (fieldName ?? "").toLowerCase();
 
+  // If we have verified options loaded by the API, picking the first is inherently safe.
   if (options && Object.keys(options).length > 0) {
-    return Object.keys(options)[0]; // pick first option
+    return Object.keys(options)[0]; 
   }
 
-  // Heuristic: if it looks like a user lookup, entity link, or cross-reference, provide a safe integer
-  if (ft.includes("user") || ft.includes("entity") || ft.includes("lookup") || ft.includes("reference") ||
-      fn.includes("user") || fn.includes("party") || fn.includes("client") || fn.includes("assignee") || fn.includes("department")) {
-    return "1";
+  // VITAL FIX: If a field is a strict relationship or selection type but we were NOT given
+  // selectOptions by the intake form API, providing a blind dummy string like "Test text" will 
+  // IMMEDIATELY trigger a 400 "invalid value provided" error because it expects an ID or exact match.
+  // Returning "" ensures the payload builder skips appending it, allowing the contract to create safely 
+  // (unless the field is strictly mandatory, in which case the user must manually input a real ID).
+  if (ft.includes("dropdown") || ft.includes("radio") || ft.includes("checkbox") || ft.includes("select") || 
+      ft.includes("lookup") || ft.includes("entity") || ft.includes("reference") || ft.includes("user")) {
+    return "";
   }
 
+  // Hardcode known common lookups that misdeclare their field type
+  if (fn.includes("user") || fn.includes("party") || fn.includes("client") || fn.includes("department")) {
+    return "";
+  }
+
+  // For genuine free-form text, number, date fields, generating dummy string is perfectly safe.
   return DUMMY_STRINGS[ft] ?? DUMMY_STRINGS.text;
 }
 
@@ -152,14 +163,18 @@ export default function BulkTestCreatorPage() {
     queryKey: ["defaultClient", tenant],
     queryFn: async () => {
       try {
-        const res = await clients!.oldProd.get(`/api/${tenant}/Client`, { params: { PageNo: 1, PerPage: 1 } });
+        // Leah APIs strictly require pageNumber/pageSize, not PageNo
+        const res = await clients!.oldProd.get(`/api/${tenant}/Client`, { params: { pageNumber: 1, pageSize: 1 } });
         const root = res.data?.data ?? res.data;
         const list = Array.isArray(root?.data) ? root.data : (Array.isArray(root?.results) ? root.results : (Array.isArray(root) ? root : []));
         if (list.length > 0) {
           return list[0].clientId || list[0].id || 1;
         }
-      } catch { return undefined; }
-      return undefined;
+      } catch (e) {
+        console.warn("Could not fetch fallback client mapping", e);
+        return 1;
+      }
+      return 1;
     },
     enabled: !!clients && !!tenant,
     staleTime: 60 * 60_000,
