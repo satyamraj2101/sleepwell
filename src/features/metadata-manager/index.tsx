@@ -1317,8 +1317,17 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                 {conditions.map((cond, ci) => {
                   if (!cond) return null;
                   const logicalOp = cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : "");
-                  const fieldName = cond?.conditionFieldName || cond?.fieldName || cond?.fieldLabel || cond?.field || cond?.id || "?";
-                  const fieldId = cond?.conditionFieldId || cond?.fieldId;
+                  let fieldNameOrObj = cond?.conditionFieldName || cond?.fieldName || cond?.fieldLabel || cond?.field || cond?.id || "?";
+                  
+                  // In some complex querybuilder rules, cond.field is a full object!
+                  let fieldName = "?";
+                  if (typeof fieldNameOrObj === 'string' || typeof fieldNameOrObj === 'number') {
+                    fieldName = String(fieldNameOrObj);
+                  } else if (typeof fieldNameOrObj === 'object' && fieldNameOrObj !== null) {
+                    fieldName = String(fieldNameOrObj.displayName || fieldNameOrObj.label || fieldNameOrObj.id || JSON.stringify(fieldNameOrObj));
+                  }
+
+                  const fieldId = cond?.conditionFieldId || cond?.fieldId || (typeof cond?.field === 'object' ? cond?.field?.id : undefined);
                   const operator = String(cond?.operator ?? cond?.conditionType ?? "=").toUpperCase().replace(/_/g, ' ');
                   
                   let valStr = "";
