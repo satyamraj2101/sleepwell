@@ -59,12 +59,21 @@ const DUMMY_STRINGS: Record<string, string> = {
   phone:         "+1-555-000-0000",
 };
 
-function dummyValueForFieldType(fieldType: string, options?: Record<string, string>): string {
-  const t = (fieldType ?? "").toLowerCase().replace(/\s/g, "");
+function dummyValueForFieldType(fieldName: string, fieldType: string, options?: Record<string, string>): string {
+  const ft = (fieldType ?? "").toLowerCase().replace(/\s/g, "");
+  const fn = (fieldName ?? "").toLowerCase();
+
   if (options && Object.keys(options).length > 0) {
     return Object.keys(options)[0]; // pick first option
   }
-  return DUMMY_STRINGS[t] ?? DUMMY_STRINGS.text;
+
+  // Heuristic: if it looks like a user lookup, entity link, or cross-reference, provide a safe integer
+  if (ft.includes("user") || ft.includes("entity") || ft.includes("lookup") || ft.includes("reference") ||
+      fn.includes("user") || fn.includes("party") || fn.includes("client") || fn.includes("assignee") || fn.includes("department")) {
+    return "1";
+  }
+
+  return DUMMY_STRINGS[ft] ?? DUMMY_STRINGS.text;
 }
 
 // Build step definitions for a run
@@ -159,17 +168,18 @@ export default function BulkTestCreatorPage() {
 
   // Flatten all intake fields
   const allIntakeFields = useMemo(() => {
-    const out: Array<{ fieldId: number; fieldName: string; fieldType: string; selectOptions?: Record<string, string> | null; isMandatory?: boolean }> = [];
+    const out: Array<{ fieldId: number; fieldName: string; fieldType: string; selectOptions?: Record<string, string> | null; isMandatory?: boolean, groupType?: string }> = [];
     for (const g of intakeGroups) {
+      const type = (g as any).groupType || "Custom";
       const sections = (g as any).sections ?? [];
       for (const s of sections) {
         for (const f of (s.fields ?? [])) {
-          out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false });
+          out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type });
         }
       }
       // Some versions have fields directly on group
       for (const f of ((g as any).fields ?? [])) {
-        out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false });
+        out.push({ fieldId: f.fieldDefinitionId ?? f.fieldId, fieldName: f.fieldLabel ?? f.fieldName, fieldType: f.fieldType, selectOptions: f.selectOptions ?? null, isMandatory: f.isMandatory ?? false, groupType: type });
       }
     }
     return out.filter(f => f.fieldId);
@@ -182,7 +192,7 @@ export default function BulkTestCreatorPage() {
     if (!selAppTypeId || !selectedAppType) { toast.error("Select an application type first"); return; }
     const defaultFields: Record<string, string> = {};
     for (const f of allIntakeFields) {
-      defaultFields[String(f.fieldId)] = dummyValueForFieldType(f.fieldType, f.selectOptions ?? undefined);
+      defaultFields[String(f.fieldId)] = dummyValueForFieldType(f.fieldName, f.fieldType, f.selectOptions ?? undefined);
     }
     const newRuns: TestRun[] = Array.from({ length: runCount }, (_, i) => ({
       id: `run-${Date.now()}-${i}`,
@@ -233,8 +243,7 @@ export default function BulkTestCreatorPage() {
       let legalPartyVal: number | null = null;
 
       // Only send simple (non-table) custom fields.
-      // We must also extract core System Fields (like Client, Legal Party) which 
-      // Leah includes in the intake layout but expects in root arrays, not customFields.
+      // We explicitly exclude Standard group fields as they map to core properties.
       const safeCustomFields: any[] = [];
       
       Object.entries(run.customFieldValues).forEach(([k, v]) => {
@@ -246,38 +255,35 @@ export default function BulkTestCreatorPage() {
         
         const name = (fieldDef.fieldName || (fieldDef as any).fieldLabel || "").toLowerCase();
         
-        // 1. Intercept Client
+        // 1. Intercept Core Properties from Intake Form
         if (name === "client" || name === "clients" || name === "client name") {
-          clientIdVal = Number(v);
-          return; // Do not send as custom field
+          clientIdVal = Number(v) || 1; // fallback to 1 if dummy string
+          return;
         }
         
-        // 2. Intercept Legal Party
         if (name === "legal party" || name === "legal parties" || name === "vendor" || name === "contracting party") {
-          legalPartyVal = Number(v);
+          legalPartyVal = Number(v) || null;
           return;
         }
 
-        // 3. Exclude Table fields
+        // 2. Safely Exclude Table fields
         if (fieldDef.fieldType?.toLowerCase() === "table") return;
 
-        // 4. Exclude known system data types
-        if ((fieldDef as any).isSystemField === true || String((fieldDef as any).metaDataType).toLowerCase() === "system") {
-          return;
-        }
+        // 3. Exclude Standard Group (Core Leah Properties returned in Intake)
+        if (fieldDef.groupType === "Standard") return;
 
-        // Otherwise, it is a true custom field
+        // Otherwise, it is a valid runtime Custom Field
         safeCustomFields.push({ customFieldId: Number(k), customFieldValue: String(v) });
       });
 
       const payload: any = {
         id: 0,
         applicationTypeId: run.appTypeId,
-        requestTypeId: 1, // 1 = New Contract Request
+        requestTypeId: 1, 
         recordId: 0,
         isUploadedContract: false,
         requestorUsername: username,
-        skipCustomFields: false,  // Must validate fields because mandatory fields will fail otherwise
+        skipCustomFields: false,  
         skipClientCustomFields: true,
         description: `[BULK-TEST-RUN-${run.index}] Auto-generated by Leah Toolkit ${randId()} — ${new Date().toLocaleString()}`,
         isConfidential: false,
@@ -295,7 +301,7 @@ export default function BulkTestCreatorPage() {
         contractPriority: { priority: false, priorityReason: "" },
         recordClassificationId: 0,
         integrationId: [],
-        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [],
+        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [{ clientId: 1, isPrimary: true }],
         confidentialRecords: [],
         customFields: safeCustomFields,
       };
