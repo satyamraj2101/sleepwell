@@ -1327,9 +1327,14 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                     else if (typeof fieldNameRaw === 'object') fieldName = String((fieldNameRaw as any).displayName || (fieldNameRaw as any).label || (fieldNameRaw as any).id || (fieldNameRaw as any).name || JSON.stringify(fieldNameRaw));
 
                     const rawFieldIdStr = String(cond?.conditionFieldId ?? cond?.fieldId ?? (typeof cond?.field === 'object' ? (cond?.field as any)?.id : "") ?? "");
+                    // Strip Leah's 'F600' alpha prefix: F600371 → 371, but keep plain numeric IDs intact
+                    // Pattern: starts with optional letter(s) followed by zeros, then the real digits
                     let fieldId = rawFieldIdStr;
-                    const leahPrefixMatch = rawFieldIdStr.match(/^[A-Z]?6?0*([1-9]\d+)$/i);
-                    if (leahPrefixMatch) fieldId = leahPrefixMatch[1];
+                    if (/^[A-Za-z]+0*\d+$/.test(rawFieldIdStr)) {
+                      // Has alpha prefix — extract just the trailing digits
+                      const m = rawFieldIdStr.match(/(\d+)$/);
+                      if (m) fieldId = m[1];
+                    }
 
                     const operatorRaw = String(cond?.operator ?? cond?.conditionType ?? "").trim();
                     const operatorStr = operatorRaw.toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
@@ -1360,7 +1365,8 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                       }
                     }
 
-                    const condKey = `c${ci}-${fieldId || ''}-${operatorRaw}`;
+                    // Guaranteed unique key: use array index + fieldId + operator + value snippet
+                    const condKey = `cond-${ci}-${rawFieldIdStr}-${operatorRaw}-${valStr.slice(0,10)}`;
                     const opColor = operatorStr.includes('NOT') ? 'text-red-300 bg-red-500/10 border-red-500/20' :
                       operatorStr.includes('NULL') ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' :
                       'text-amber-300 bg-amber-500/10 border-amber-500/20';
