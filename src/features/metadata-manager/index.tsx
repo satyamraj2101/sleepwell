@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import {
-  Plus, Copy, ChevronDown, AlertTriangle, CheckCircle2, Search, X, Trash2,
-  Edit2, Download, RefreshCw, Star, Eye, EyeOff, Loader2, GitBranch, List,
+  Plus, Copy, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Search, X, Trash2,
+  Edit2, Download, RefreshCw, Star, Eye, EyeOff, Loader2, GitBranch, List, Network, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +69,7 @@ function typeColor(ft: string) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MetadataManagerPage() {
-  const [tab, setTab] = useState<"metadata" | "intake">("metadata");
+  const [tab, setTab] = useState<"metadata" | "intake" | "tree">("metadata");
   const [selAppTypeId, setSelAppTypeId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -270,6 +270,12 @@ export default function MetadataManagerPage() {
             <span className="ml-1.5 text-[9px] text-amber-400">(select app type)</span>
           )}
         </TabBtn>
+        <TabBtn active={tab === "tree"} onClick={() => setTab("tree")} icon={<Network size={12} />}>
+          Field Tree
+          {tab === "tree" && !selAppTypeId && (
+            <span className="ml-1.5 text-[9px] text-amber-400">(select app type)</span>
+          )}
+        </TabBtn>
       </div>
 
       {/* Shared app type filter */}
@@ -417,6 +423,16 @@ export default function MetadataManagerPage() {
         <IntakeFieldsPanel
           groups={intakeGroups}
           isLoading={intakeLoading}
+          hasAppType={!!selAppTypeId}
+        />
+      )}
+
+      {/* ── FIELD TREE TAB ── */}
+      {tab === "tree" && (
+        <FieldTreePanel
+          fields={allFields}
+          isLoading={isLoading}
+          appTypeName={(appTypesRaw ?? []).find((at: any) => at.applicationTypeId === selAppTypeId)?.applicationTypeName}
           hasAppType={!!selAppTypeId}
         />
       )}
@@ -1435,6 +1451,218 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Field Tree Panel ─────────────────────────────────────────────────────────
+
+function FieldTreePanel({ fields, isLoading, appTypeName, hasAppType }: {
+  fields: FieldDefinition[];
+  isLoading: boolean;
+  appTypeName?: string;
+  hasAppType: boolean;
+}) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [treeSearch, setTreeSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = treeSearch.toLowerCase();
+    return fields.filter(f => {
+      if (!showInactive && !f.isActive) return false;
+      if (q && !f.fieldDisplayName?.toLowerCase().includes(q) && !f.fieldName?.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [fields, showInactive, treeSearch]);
+
+  const groupedFields = useMemo(() => {
+    const groups = new Map<string, FieldDefinition[]>();
+    for (const f of filtered) {
+      const groupKey = f.fieldGroup || f.applicationTypeName || "General";
+      if (!groups.has(groupKey)) groups.set(groupKey, []);
+      groups.get(groupKey)!.push(f);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
+
+  function toggleGroup(g: string) {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(g)) next.delete(g); else next.add(g);
+      return next;
+    });
+  }
+
+  function expandAll() { setExpandedGroups(new Set(groupedFields.map(([k]) => k))); }
+  function collapseAll() { setExpandedGroups(new Set()); }
+
+  const activeCount = fields.filter(f => f.isActive).length;
+  const inactiveCount = fields.length - activeCount;
+
+  if (!hasAppType) return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+      <Network size={40} className="text-muted-foreground/20" />
+      <div>
+        <p className="text-sm font-medium text-muted-foreground">Select an Application Type</p>
+        <p className="text-xs text-muted-foreground/50 mt-1">Choose an app type above to visualize its complete field schema</p>
+      </div>
+    </div>
+  );
+
+  if (isLoading) return <div className="flex justify-center py-20"><Spinner size={28} /></div>;
+
+  return (
+    <div className="space-y-4">
+      {/* Header banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gradient-to-r from-blue-500/10 to-violet-500/10 border border-blue-500/20 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <Network size={16} className="text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground">{appTypeName ?? "Unknown App Type"}</p>
+            <p className="text-[11px] text-muted-foreground">
+              <span className="text-emerald-400 font-semibold">{activeCount} active</span>
+              {inactiveCount > 0 && <span className="ml-2 text-muted-foreground/60">{inactiveCount} inactive</span>}
+              {" · "}
+              <span className="text-violet-400">{groupedFields.length} groups</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={treeSearch}
+              onChange={e => setTreeSearch(e.target.value)}
+              placeholder="Search fields…"
+              className="h-8 pl-7 pr-3 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring w-48"
+            />
+          </div>
+          <button
+            onClick={() => setShowInactive(p => !p)}
+            className={cn("h-8 px-3 text-xs rounded-md border transition-colors", showInactive ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "bg-background border-border text-muted-foreground hover:text-foreground")}
+          >
+            {showInactive ? "Hiding inactive" : "Show inactive"}
+          </button>
+          <button onClick={expandAll} className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border bg-background rounded-md transition-colors">Expand all</button>
+          <button onClick={collapseAll} className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border bg-background rounded-md transition-colors">Collapse all</button>
+        </div>
+      </div>
+
+      {/* Tree */}
+      <div className="space-y-2">
+        {groupedFields.length === 0 && (
+          <p className="text-center text-sm text-muted-foreground py-12">No fields found{treeSearch ? " matching your search" : ""}.</p>
+        )}
+        {groupedFields.map(([group, groupFields]) => {
+          const isOpen = expandedGroups.has(group);
+          const activeInGroup = groupFields.filter(f => f.isActive).length;
+          const hasConditioned = groupFields.filter(f => {
+            const vc = (f as any).visibilityConditions;
+            return Array.isArray(vc) ? vc.length > 0 : !!vc;
+          }).length;
+
+          return (
+            <div key={group} className="border border-border rounded-xl overflow-hidden">
+              {/* Group header */}
+              <button
+                onClick={() => toggleGroup(group)}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+              >
+                <div className={cn("transition-transform duration-200 text-muted-foreground/60", isOpen && "rotate-90")}>
+                  <ChevronRight size={14} />
+                </div>
+                <Layers size={13} className="text-violet-400 shrink-0" />
+                <span className="font-semibold text-sm text-foreground flex-1 truncate">{group}</span>
+                <div className="flex items-center gap-2">
+                  {hasConditioned > 0 && (
+                    <span className="text-[9px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                      <GitBranch size={7} />{hasConditioned} conditional
+                    </span>
+                  )}
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    {activeInGroup} active
+                  </span>
+                  {groupFields.length - activeInGroup > 0 && (
+                    <span className="text-[10px] text-muted-foreground/50 bg-muted border border-border/50 px-2 py-0.5 rounded-full">
+                      {groupFields.length - activeInGroup} inactive
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground/40">{groupFields.length} total</span>
+                </div>
+              </button>
+
+              {/* Field rows */}
+              {isOpen && (
+                <div className="divide-y divide-border/40">
+                  {groupFields.map((f) => {
+                    const tc = typeColor(f.fieldType);
+                    const isRequired = f.isMandatoryField ?? f.isRequired;
+                    const condCount = (() => {
+                      const vc = (f as any).visibilityConditions;
+                      if (Array.isArray(vc)) return vc.length;
+                      return vc ? 1 : 0;
+                    })();
+
+                    return (
+                      <div
+                        key={f.fieldId}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-2.5 hover:bg-muted/10 transition-colors",
+                          !f.isActive && "opacity-40",
+                        )}
+                      >
+                        {/* Tree connector lines */}
+                        <div className="flex items-center gap-0 text-border shrink-0 select-none">
+                          <span className="w-3 border-l border-b border-border/30 h-5 mr-1.5" />
+                        </div>
+
+                        {/* Active dot */}
+                        <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", f.isActive ? "bg-emerald-400" : "bg-muted-foreground/20")} />
+
+                        {/* Field info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={cn("text-[13px] font-medium truncate max-w-[280px]", !f.isActive && "line-through text-muted-foreground")}>
+                              {f.fieldDisplayName || f.fieldName}
+                            </span>
+                            {isRequired && (
+                              <span className="text-[8px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1 py-0.5 rounded shrink-0">REQ</span>
+                            )}
+                            {condCount > 0 && (
+                              <span className="text-[8px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1 py-0.5 rounded shrink-0 flex items-center gap-0.5">
+                                <GitBranch size={7} />{condCount}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
+                        </div>
+
+                        {/* Type chip */}
+                        <span className={cn("text-[9px] font-semibold px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap", tc.bg, tc.text, tc.border)}>
+                          {f.fieldType || "—"}
+                        </span>
+
+                        {/* ID + copy */}
+                        <span className="text-[9px] font-mono text-muted-foreground/30 w-8 text-right shrink-0">#{f.fieldId}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(String(f.fieldId)); toast.success(`Copied #${f.fieldId}`); }}
+                          className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 text-muted-foreground/40 hover:text-foreground rounded transition-all"
+                        >
+                          <Copy size={10} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
