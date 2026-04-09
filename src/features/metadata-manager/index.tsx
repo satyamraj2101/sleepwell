@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
 import { PageHeader, Spinner, ErrorAlert } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
@@ -1330,116 +1330,22 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
                 <GitBranch size={9} /> Visibility Conditions ({conditions.length})
               </p>
-               <TooltipProvider>
-                <div className="space-y-2">
-                  {conditions.map((cond, ci) => {
-                    if (!cond) return null;
-                    const logicalOp = (cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : "")) as string;
-                    
-                    let fieldNameRaw: any = cond?.fieldLabel ?? cond?.conditionFieldName ?? cond?.fieldName ?? cond?.field ?? cond?.id;
-                    let fieldName = "?";
-                    if (fieldNameRaw === null || fieldNameRaw === undefined) fieldName = "?";
-                    else if (typeof fieldNameRaw === 'string' || typeof fieldNameRaw === 'number') fieldName = String(fieldNameRaw);
-                    else if (typeof fieldNameRaw === 'object') fieldName = String((fieldNameRaw as any).displayName || (fieldNameRaw as any).label || (fieldNameRaw as any).id || (fieldNameRaw as any).name || JSON.stringify(fieldNameRaw));
-
-                    const rawFieldIdStr = String(cond?.conditionFieldId ?? cond?.fieldId ?? (typeof cond?.field === 'object' ? (cond?.field as any)?.id : "") ?? "");
-                    // Strip Leah's 'F600' alpha prefix: F600371 → 371, but keep plain numeric IDs intact
-                    // Pattern: starts with optional letter(s) followed by zeros, then the real digits
-                    let fieldId = rawFieldIdStr;
-                    if (/^[A-Za-z]+0*\d+$/.test(rawFieldIdStr)) {
-                      // Has alpha prefix — extract just the trailing digits
-                      const m = rawFieldIdStr.match(/(\d+)$/);
-                      if (m) fieldId = m[1];
-                    }
-
-                    const operatorRaw = String(cond?.operator ?? cond?.conditionType ?? "").trim();
-                    const operatorStr = operatorRaw.toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
-                    
-                    const NO_VAL_OPS = ['ISNOTNULL', 'ISNULL', 'IS NOT NULL', 'IS NULL', 'IS EMPTY', 'IS NOT EMPTY', 'IS_NOT_NULL', 'IS_NULL', 'EXISTS', 'NOT EXISTS', 'NOT_NULL', 'NULL'];
-                    const operatorNeedsNoValue = NO_VAL_OPS.some(op => operatorStr.replace(/\s/g,'').includes(op.replace(/\s/g,'')));
-
-                    function extractVal(v: any): string {
-                      if (v === null || v === undefined) return "";
-                      if (Array.isArray(v)) {
-                        const strs = v.map((x: any) => {
-                          if (x === null || x === undefined || x === "") return null;
-                          if (typeof x === 'object') return String((x as any).label ?? (x as any).displayValue ?? (x as any).name ?? (x as any).id ?? (x as any).value ?? JSON.stringify(x));
-                          return String(x);
-                        }).filter(Boolean) as string[];
-                        return strs.join(', ');
-                      }
-                      if (typeof v === 'object') return String((v as any).label ?? (v as any).displayValue ?? (v as any).name ?? (v as any).id ?? (v as any).value ?? JSON.stringify(v));
-                      return String(v);
-                    }
-
-                    let valStr = "";
-                    if (!operatorNeedsNoValue) {
-                      const candidates = [cond?.valueDisplay, cond?.displayValue, cond?.conditionValue, cond?.value, cond?.val, (cond as any)?.values];
-                      for (const c of candidates) {
-                        const ex = extractVal(c);
-                        if (ex.trim().length > 0) { valStr = ex; break; }
-                      }
-                    }
-
-                    // Guaranteed unique key: use array index + fieldId + operator + value snippet
-                    const condKey = `cond-${ci}-${rawFieldIdStr}-${operatorRaw}-${valStr.slice(0,10)}`;
-                    const opColor = operatorStr.includes('NOT') ? 'text-red-300 bg-red-500/10 border-red-500/20' :
-                      operatorStr.includes('NULL') ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' :
-                      'text-amber-300 bg-amber-500/10 border-amber-500/20';
-
-                    return (
-                      <Tooltip key={condKey} delayDuration={200}>
-                        <TooltipTrigger asChild>
-                          <div className="bg-background/40 hover:bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 rounded-lg px-3 py-2.5 text-[11px] font-mono transition-all cursor-help group/cond">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {ci > 0 && (
-                                <span className="text-violet-300 font-black text-[9px] uppercase tracking-widest bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded shrink-0">
-                                  {logicalOp || "AND"}
-                                </span>
-                              )}
-                              <span className="text-muted-foreground/60 shrink-0 text-[10px]">IF</span>
-                              <span className="text-violet-200 font-bold px-2 py-0.5 bg-violet-500/10 rounded border border-violet-500/25 max-w-[280px] truncate" title={fieldName}>
-                                {fieldName}
-                              </span>
-                              {fieldId && fieldId !== "0" && (
-                                <span className="text-muted-foreground/30 text-[9px] font-mono shrink-0" title={`Leah internal ID: ${rawFieldIdStr}`}>#{fieldId}</span>
-                              )}
-                              <span className={`font-bold px-2 py-0.5 rounded text-[10px] shrink-0 border ${opColor}`}>{operatorStr || "="}</span>
-                              {!operatorNeedsNoValue && (
-                                <span className={`font-semibold px-2 py-0.5 rounded border text-[11px] transition-colors ${
-                                  valStr
-                                    ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25'
-                                    : 'text-red-400/50 bg-red-500/5 border-dashed border-red-500/20 text-[9px] italic'
-                                }`}>
-                                  {valStr ? `"${valStr}"` : "⚠ value not in API response — hover to inspect raw JSON"}
-                                </span>
-                              )}
-                              {operatorNeedsNoValue && (
-                                <span className="text-sky-500/40 text-[9px] italic shrink-0">— null check, no value required</span>
-                              )}
-                            </div>
-                            {(cond as any)?.action && (
-                              <div className="mt-2 text-[10px] text-muted-foreground/50 border-t border-white/5 pt-1.5 flex items-center gap-1.5">
-                                <span className="text-white/30 font-bold tracking-widest text-[8px]">ACTION</span>
-                                <span className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-white/60">{(cond as any).action}</span>
-                              </div>
-                            )}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="right" sideOffset={12} className="w-[360px] bg-[#0a0a10] border-white/10 p-0 overflow-hidden shadow-2xl rounded-xl">
-                          <div className="bg-violet-500/10 px-3 py-2 border-b border-white/10 flex items-center justify-between">
-                            <p className="text-[10px] font-black text-violet-300 uppercase tracking-widest">Raw Leah Logic Schema</p>
-                            <span className="text-[9px] text-muted-foreground/40">hover to inspect • copy with devtools</span>
-                          </div>
-                          <div className="p-3 text-[10px] font-mono text-emerald-400/80 whitespace-pre-wrap break-all max-h-[340px] overflow-auto leading-relaxed">
-                            {JSON.stringify(cond, null, 2)}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              </TooltipProvider>
+               <div className="space-y-2">
+                {conditions.map((cond, ci) => {
+                  if (!cond) return null;
+                  const rawFieldIdStr = String(cond?.conditionFieldId ?? cond?.fieldId ?? (typeof cond?.field === 'object' ? (cond?.field as any)?.id : "") ?? "");
+                  const operatorRaw = String(cond?.operator ?? cond?.conditionType ?? "").trim();
+                  let valStr2 = "";
+                  const candidates2: any[] = [cond?.valueDisplay, cond?.displayValue, cond?.conditionValue, cond?.value, cond?.val];
+                  for (const c of candidates2) {
+                    if (c === null || c === undefined) continue;
+                    const ex = Array.isArray(c) ? c.filter(Boolean).map((x: any) => typeof x === 'object' ? String((x as any).label ?? (x as any).name ?? JSON.stringify(x)) : String(x)).join(', ') : String(c);
+                    if (ex.trim()) { valStr2 = ex; break; }
+                  }
+                  const condKey = `cond-${ci}-${rawFieldIdStr}-${operatorRaw}-${valStr2.slice(0,8)}`;
+                  return <ConditionCard key={condKey} cond={cond} ci={ci} />;
+                })}
+              </div>
               <p className="text-[9px] text-muted-foreground/40 mt-1.5">
                 This field shows/hides based on the conditions above. Edit via the Leah CLM UI to modify conditions.
               </p>
@@ -1449,6 +1355,111 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
           {!hasConditions && (
             <p className="text-[10px] text-muted-foreground/40 italic">No visibility conditions — this field always shows.</p>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Condition Card ───────────────────────────────────────────────────────────
+
+function ConditionCard({ cond, ci }: { cond: any; ci: number }) {
+  const [showRaw, setShowRaw] = useState(false);
+
+  const logicalOp = String(cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : ""));
+
+  let fieldNameRaw: any = cond?.fieldLabel ?? cond?.conditionFieldName ?? cond?.fieldName ?? cond?.field ?? cond?.id;
+  let fieldName = "?";
+  if (fieldNameRaw === null || fieldNameRaw === undefined) fieldName = "?";
+  else if (typeof fieldNameRaw === 'string' || typeof fieldNameRaw === 'number') fieldName = String(fieldNameRaw);
+  else if (typeof fieldNameRaw === 'object') fieldName = String((fieldNameRaw as any).displayName || (fieldNameRaw as any).label || (fieldNameRaw as any).id || (fieldNameRaw as any).name || JSON.stringify(fieldNameRaw));
+
+  const rawFieldIdStr = String(cond?.conditionFieldId ?? cond?.fieldId ?? (typeof cond?.field === 'object' ? (cond?.field as any)?.id : "") ?? "");
+  let fieldId = rawFieldIdStr;
+  if (/^[A-Za-z]+0*\d+$/.test(rawFieldIdStr)) {
+    const m = rawFieldIdStr.match(/(\d+)$/);
+    if (m) fieldId = m[1];
+  }
+
+  const operatorRaw = String(cond?.operator ?? cond?.conditionType ?? "").trim();
+  const operatorStr = operatorRaw.toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
+  const NO_VAL_OPS = ['ISNOTNULL','ISNULL','IS NOT NULL','IS NULL','IS EMPTY','IS NOT EMPTY','IS_NOT_NULL','IS_NULL','EXISTS','NOT EXISTS','NOT_NULL','NULL'];
+  const operatorNeedsNoValue = NO_VAL_OPS.some(op => operatorStr.replace(/\s/g,'').includes(op.replace(/\s/g,'')));
+
+  let valStr = "";
+  if (!operatorNeedsNoValue) {
+    const candidates: any[] = [cond?.valueDisplay, cond?.displayValue, cond?.conditionValue, cond?.value, cond?.val, (cond as any)?.values];
+    for (const c of candidates) {
+      if (c === null || c === undefined) continue;
+      let ex = "";
+      if (Array.isArray(c)) {
+        ex = c.filter(Boolean).map((x: any) => typeof x === 'object' ? String((x as any).label ?? (x as any).displayValue ?? (x as any).name ?? (x as any).id ?? JSON.stringify(x)) : String(x)).join(', ');
+      } else if (typeof c === 'object') {
+        ex = String((c as any).label ?? (c as any).displayValue ?? (c as any).name ?? (c as any).id ?? (c as any).value ?? JSON.stringify(c));
+      } else {
+        ex = String(c);
+      }
+      if (ex.trim()) { valStr = ex; break; }
+    }
+  }
+
+  const opColor = operatorStr.includes('NOT') ? 'text-red-300 bg-red-500/10 border-red-500/20' :
+    operatorStr.includes('NULL') ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' :
+    'text-amber-300 bg-amber-500/10 border-amber-500/20';
+
+  return (
+    <div className="rounded-lg border border-violet-500/20 overflow-hidden">
+      {/* Main condition row */}
+      <div className="bg-background/40 hover:bg-violet-500/5 px-3 py-2.5 text-[11px] font-mono transition-all">
+        <div className="flex items-center gap-2 flex-wrap">
+          {ci > 0 && (
+            <span className="text-violet-300 font-black text-[9px] uppercase tracking-widest bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded shrink-0">
+              {logicalOp || "AND"}
+            </span>
+          )}
+          <span className="text-muted-foreground/60 shrink-0 text-[10px]">IF</span>
+          <span className="text-violet-200 font-bold px-2 py-0.5 bg-violet-500/10 rounded border border-violet-500/25 max-w-[260px] truncate" title={fieldName}>
+            {fieldName}
+          </span>
+          {fieldId && fieldId !== "0" && (
+            <span className="text-muted-foreground/30 text-[9px] font-mono shrink-0">#{fieldId}</span>
+          )}
+          <span className={`font-bold px-2 py-0.5 rounded text-[10px] shrink-0 border ${opColor}`}>{operatorStr || "="}</span>
+          {!operatorNeedsNoValue && (
+            <span className={cn("font-semibold px-2 py-0.5 rounded border text-[11px] transition-colors", valStr ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' : 'text-muted-foreground/40 border-dashed border-muted text-[9px] italic')}>
+              {valStr ? `"${valStr}"` : "value unavailable"}
+            </span>
+          )}
+          {operatorNeedsNoValue && (
+            <span className="text-sky-500/40 text-[9px] italic shrink-0">— null check</span>
+          )}
+          {/* Raw JSON toggle */}
+          <button
+            onClick={() => setShowRaw(p => !p)}
+            className={cn("ml-auto shrink-0 text-[9px] px-2 py-0.5 rounded border transition-colors", showRaw ? "text-violet-400 bg-violet-500/20 border-violet-500/40" : "text-muted-foreground/40 border-border/40 hover:text-muted-foreground hover:border-border")}
+          >
+            {showRaw ? "▲ schema" : "▼ schema"}
+          </button>
+        </div>
+        {(cond as any)?.action && (
+          <div className="mt-1.5 text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
+            <span className="text-white/30 font-bold tracking-widest text-[8px]">ACTION</span>
+            <span className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-white/60">{(cond as any).action}</span>
+          </div>
+        )}
+      </div>
+      {/* Inline raw JSON panel */}
+      {showRaw && (
+        <div className="border-t border-violet-500/20">
+          <div className="bg-violet-500/5 px-3 py-1.5 border-b border-violet-500/10 flex items-center justify-between">
+            <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest">Raw Leah Logic Schema</span>
+            <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(cond, null, 2)); toast.success('Copied JSON'); }} className="text-[9px] text-muted-foreground/40 hover:text-violet-400 transition-colors">
+              copy
+            </button>
+          </div>
+          <pre className="p-3 text-[10px] font-mono text-emerald-400/80 whitespace-pre-wrap break-all max-h-[280px] overflow-auto leading-relaxed bg-[#080812]">
+            {JSON.stringify(cond, null, 2)}
+          </pre>
         </div>
       )}
     </div>
