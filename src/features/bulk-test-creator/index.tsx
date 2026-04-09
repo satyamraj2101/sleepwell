@@ -153,12 +153,15 @@ export default function BulkTestCreatorPage() {
     queryFn: async () => {
       try {
         const res = await clients!.oldProd.get(`/api/${tenant}/Client`, { params: { PageNo: 1, PerPage: 1 } });
-        const list = res.data?.data ?? res.data?.results ?? res.data;
-        if (Array.isArray(list) && list.length > 0) return list[0].clientId || list[0].id || 1;
-      } catch { return 1; }
-      return 1;
+        const root = res.data?.data ?? res.data;
+        const list = Array.isArray(root?.data) ? root.data : (Array.isArray(root?.results) ? root.results : (Array.isArray(root) ? root : []));
+        if (list.length > 0) {
+          return list[0].clientId || list[0].id || 1;
+        }
+      } catch { return undefined; }
+      return undefined;
     },
-    enabled: !!clients,
+    enabled: !!clients && !!tenant,
     staleTime: 60 * 60_000,
   });
 
