@@ -9,7 +9,7 @@ export function useAppTypes() {
   const { tenant, username } = useAuthStore();
   return useQuery({
     queryKey: QK.appTypes(tenant),
-    queryFn: () => listApplicationTypes(clients!.oldProd, tenant, username),
+    queryFn: () => listApplicationTypes(clients!.oldProd, tenant, username, { perPage: 1000 }),
     enabled: !!clients,
     staleTime: 10 * 60 * 1000, // app types rarely change
   });

@@ -102,6 +102,19 @@ export default function ContractEditPage() {
         )}
 
         <div className="space-y-10 pb-20">
+          <div className="space-y-4">
+             <div className="flex items-center gap-3 px-2">
+               <Layers size={14} className="text-blue-500" />
+               <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.25em]">Global View</h3>
+             </div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <AppTypeCard 
+                  at={{ applicationTypeId: -1, applicationTypeName: "All Frameworks", applicationName: "Global Contract Asset View" } as ApplicationType} 
+                  onClick={() => { setSelAppType({ applicationTypeId: -1, applicationTypeName: "All Frameworks" } as ApplicationType); setPage(1); setSearchQ(""); }} 
+                />
+             </div>
+          </div>
+
           {priority.length > 0 && (
             <div className="space-y-4">
                <div className="flex items-center gap-3 px-2">

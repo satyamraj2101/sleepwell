@@ -15,8 +15,11 @@ export function useContracts(appTypeId: number | null, params: Omit<ContractList
   return useQuery({
     queryKey: [...QK.contracts(tenant, appTypeId ?? 0, params.PageNumber ?? 1), params],
     queryFn: () =>
-      listContracts(clients!.newCloud, tenant, { ApplicationTypeId: appTypeId!, ...params }),
-    enabled: !!clients && !!appTypeId,
+      listContracts(clients!.newCloud, tenant, { 
+        ...(appTypeId !== -1 && { ApplicationTypeId: appTypeId! }),
+        ...params 
+      }),
+    enabled: !!clients && appTypeId !== null,
   });
 }
 
