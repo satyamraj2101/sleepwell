@@ -19,6 +19,7 @@ const ReportsPage      = lazy(() => import("@/features/custom-reports/index"));
 const ComplyPage       = lazy(() => import("@/features/compare-comply/index"));
 const BulkImportPage   = lazy(() => import("@/features/bulk-import/index"));
 const TestingPage      = lazy(() => import("@/testing/TestingPage"));
+const BulkTestPage     = lazy(() => import("@/features/bulk-test-creator/index"));
 
 function PageLoader() {
   return (
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="compare-comply"  element={<ComplyPage />} />
             <Route path="bulk-import"     element={<BulkImportPage />} />
             <Route path="testing"         element={<TestingPage />} />
+            <Route path="bulk-test"        element={<BulkTestPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

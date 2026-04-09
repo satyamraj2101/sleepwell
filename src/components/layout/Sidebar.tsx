@@ -24,6 +24,7 @@ const NAV = [
   { path: "/bulk-import",    icon: Download,    label: "Bulk Import Tool" },
   { label: "Testing", isSection: true },
   { path: "/testing",        icon: FlaskConical, label: "Scenario Runner" },
+  { path: "/bulk-test",      icon: Zap,          label: "Bulk Test Creator" },
 ];
 
 const BADGE_STYLES: Record<string, string> = {
