@@ -13,6 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
 import { getIntakeFormFields, createContract, getContractDetail } from "@/api/contractRequest";
 import { getPreExecutionApprovals } from "@/api/approval";
+import { listUsers } from "@/api/users";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,17 @@ export default function BulkTestCreatorPage() {
   const [isRunningAll, setIsRunningAll] = useState(false);
   const abortRef = useRef(false);
 
+  // Look up the logged-in user's real userId and departmentId
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser", tenant, username],
+    queryFn: async () => {
+      const res = await listUsers(clients!.oldProd, tenant, { requestorUsername: username, search: username, pageNo: 1, perPage: 10 });
+      return res.data.find(u => u.userName?.toLowerCase() === username?.toLowerCase() || u.email?.toLowerCase() === username?.toLowerCase()) ?? res.data[0] ?? null;
+    },
+    enabled: !!clients && !!username,
+    staleTime: 10 * 60_000,
+  });
+
   // Load app types
   const { data: appTypesRaw = [] } = useQuery({
     queryKey: QK.appTypes(tenant),
@@ -228,7 +240,10 @@ export default function BulkTestCreatorPage() {
         skipCustomFields: false,
         skipClientCustomFields: true,
         assignees: [],
-        requesterUser: { UserId: 0, DepartmentId: 1 },
+        requesterUser: {
+          UserId: currentUser?.userId ?? currentUser?.id ?? 0,
+          DepartmentId: currentUser?.departmentId ?? 1,
+        },
         legalParties: [],
         contractPriority: { priority: false, priorityReason: "" },
         recordClassificationId: 0,
@@ -291,12 +306,28 @@ export default function BulkTestCreatorPage() {
 
       patchRun(run.id, { status: "done", finishedAt: Date.now() });
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? e?.message ?? "Unknown error";
+      // Extract rich validation details from 400 responses
+      const resp = e?.response?.data;
+      let msg = "Unknown error";
+      if (resp) {
+        // Leah typically returns: { message, errors: [...] } or { errors: { Field: ["msg"] } } or { title, errors: {...} }
+        const topMsg = resp.message ?? resp.title ?? resp.Message ?? "";
+        const errObj = resp.errors ?? resp.validationErrors ?? resp.Errors ?? resp.modelState ?? null;
+        let details = "";
+        if (Array.isArray(errObj)) {
+          details = errObj.map((x: any) => typeof x === "string" ? x : (x.message ?? x.errorMessage ?? JSON.stringify(x))).join(" | ");
+        } else if (errObj && typeof errObj === "object") {
+          details = Object.entries(errObj).map(([k, v]) => `${k}: ${Array.isArray(v) ? (v as string[]).join(", ") : v}`).join(" | ");
+        }
+        msg = [topMsg, details].filter(Boolean).join(" → ") || e.message;
+      } else {
+        msg = e?.message ?? "Unknown error";
+      }
       patchRun(run.id, { status: "error", error: msg, finishedAt: Date.now() });
       // Mark remaining idle steps as failed
       setRuns(prev => prev.map(r => r.id === run.id ? {
         ...r,
-        steps: r.steps.map(s => s.status === "idle" ? { ...s, status: "fail", result: "Aborted — previous step failed" } : s),
+        steps: r.steps.map(s => s.status === "idle" || s.status === "running" ? { ...s, status: "fail", result: "Aborted — previous step failed" } : s),
       } : r));
     }
   }
@@ -383,6 +414,26 @@ export default function BulkTestCreatorPage() {
               className="h-9 text-sm"
             />
           </div>
+        </div>
+
+        {/* User identity status */}
+        <div className={cn(
+          "flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs",
+          currentUser
+            ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400"
+            : "bg-amber-500/5 border-amber-500/20 text-amber-400"
+        )}>
+          {currentUser ? (
+            <>
+              <CheckCircle2 size={12} className="shrink-0" />
+              <span>Requester resolved: <strong>{currentUser.fullName || currentUser.userName}</strong> · ID #{currentUser.userId} · Dept #{currentUser.departmentId}</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle size={12} className="shrink-0" />
+              <span>User profile not resolved yet — contract creation may fail. Ensure you are connected and <strong>{username}</strong> exists in Leah.</span>
+            </>
+          )}
         </div>
 
         {/* Intake fields summary */}
