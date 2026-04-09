@@ -229,17 +229,46 @@ export default function BulkTestCreatorPage() {
       const resolvedUserId = currentUser?.userId ?? currentUser?.id ?? 0;
       const resolvedDeptId = Math.max(currentUser?.departmentId ?? 1, 1);
 
+      let clientIdVal: number | null = null;
+      let legalPartyVal: number | null = null;
+
       // Only send simple (non-table) custom fields.
-      // Table-type fields require a nested payload shape we don't handle here.
-      const safeCustomFields = Object.entries(run.customFieldValues)
-        .filter(([k, v]) => {
-          if (v === "" || v === null || v === undefined) return false;
-          // Exclude Table fields
-          const fieldDef = allIntakeFields.find(f => f.fieldId === Number(k));
-          if (fieldDef?.fieldType?.toLowerCase() === "table") return false;
-          return true;
-        })
-        .map(([k, v]) => ({ customFieldId: Number(k), customFieldValue: String(v) }));
+      // We must also extract core System Fields (like Client, Legal Party) which 
+      // Leah includes in the intake layout but expects in root arrays, not customFields.
+      const safeCustomFields: any[] = [];
+      
+      Object.entries(run.customFieldValues).forEach(([k, v]) => {
+        if (v === "" || v === null || v === undefined) return;
+        
+        // Find field definition
+        const fieldDef = allIntakeFields.find(f => f.fieldId === Number(k));
+        if (!fieldDef) return;
+        
+        const name = (fieldDef.fieldName || (fieldDef as any).fieldLabel || "").toLowerCase();
+        
+        // 1. Intercept Client
+        if (name === "client" || name === "clients" || name === "client name") {
+          clientIdVal = Number(v);
+          return; // Do not send as custom field
+        }
+        
+        // 2. Intercept Legal Party
+        if (name === "legal party" || name === "legal parties" || name === "vendor" || name === "contracting party") {
+          legalPartyVal = Number(v);
+          return;
+        }
+
+        // 3. Exclude Table fields
+        if (fieldDef.fieldType?.toLowerCase() === "table") return;
+
+        // 4. Exclude known system data types
+        if ((fieldDef as any).isSystemField === true || String((fieldDef as any).metaDataType).toLowerCase() === "system") {
+          return;
+        }
+
+        // Otherwise, it is a true custom field
+        safeCustomFields.push({ customFieldId: Number(k), customFieldValue: String(v) });
+      });
 
       const payload: any = {
         id: 0,
@@ -262,13 +291,11 @@ export default function BulkTestCreatorPage() {
         requestorId: resolvedUserId,
         requestorDpId: resolvedDeptId,
         requesterDepartmentId: resolvedDeptId,
-        legalParties: [],
+        legalParties: legalPartyVal ? [{ legalPartyId: legalPartyVal, isPrimary: true }] : [],
         contractPriority: { priority: false, priorityReason: "" },
         recordClassificationId: 0,
         integrationId: [],
-        clients: [
-          { clientId: 1, isPrimary: true } // Just needs to be non-empty for app types that mandate it
-        ],
+        clients: clientIdVal ? [{ clientId: clientIdVal, isPrimary: true }] : [],
         confidentialRecords: [],
         customFields: safeCustomFields,
       };
