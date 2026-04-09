@@ -1312,24 +1312,44 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
               <div className="space-y-1.5">
                 {conditions.map((cond, ci) => (
                   <div key={ci} className="bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2 text-[11px] font-mono">
-                    <div className="flex items-start gap-2 flex-wrap">
+                    <div className="flex items-start gap-2 flex-wrap mb-1.5">
                       {ci > 0 && (
                         <span className="text-violet-300 font-bold text-[9px] uppercase">{(cond as any).logicalOperator || (cond as any).condition || "AND"}</span>
                       )}
-                      <span className="text-muted-foreground">
-                        Field <span className="text-violet-300 font-semibold">#{(cond as any).conditionFieldId ?? (cond as any).fieldId ?? "?"}</span>
-                        {((cond as any).conditionFieldName || (cond as any).fieldName) && (
-                          <span className="text-foreground/70"> ({(cond as any).conditionFieldName || (cond as any).fieldName})</span>
-                        )}
+                      
+                      <span className="text-muted-foreground mr-1">Field</span>
+                      <span className="text-violet-300 font-bold px-1.5 py-0.5 bg-violet-500/10 rounded">
+                        {(cond as any).conditionFieldName || (cond as any).fieldName || (cond as any).fieldLabel || (cond as any).field || (cond as any).id || "?"}
                       </span>
-                      <span className="text-amber-300 font-semibold">{(cond as any).operator ?? (cond as any).conditionType ?? "="}</span>
-                      <span className="text-emerald-300">
-                        "{Array.isArray((cond as any).value) ? (cond as any).value.join(", ") : ((cond as any).conditionValue ?? (cond as any).value ?? "")}"
+                      {/* Sub id if available */}
+                      {((cond as any).conditionFieldId || (cond as any).fieldId) && (
+                         <span className="text-muted-foreground/50 text-[9px]">#{((cond as any).conditionFieldId || (cond as any).fieldId)}</span>
+                      )}
+                      
+                      <span className="text-amber-400 font-bold mx-1">
+                        {String((cond as any).operator ?? (cond as any).conditionType ?? "=").toUpperCase().replace(/_/g, ' ')}
+                      </span>
+                      
+                      <span className="text-emerald-300 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded break-all">
+                        "{Array.isArray((cond as any).value) 
+                           ? (cond as any).value.join(", ") 
+                           : (typeof (cond as any).value === 'object' && (cond as any).value !== null 
+                                ? JSON.stringify((cond as any).value) 
+                                : String((cond as any).conditionValue ?? (cond as any).value ?? ""))}"
                       </span>
                     </div>
+
+                    {/* Developer visibility fallback if essential data is missing */}
+                    {!(cond as any).operator && !(cond as any).field && !(cond as any).fieldName && (
+                      <div className="mt-2 p-2 bg-black/40 rounded text-[9px] text-muted-foreground break-all overflow-hidden border border-white/5">
+                        <span className="text-white/40 mb-1 block">RAW CONDITION:</span>
+                        {JSON.stringify(cond)}
+                      </div>
+                    )}
+
                     {(cond as any).action && (
-                      <div className="mt-1 text-[10px] text-muted-foreground/60">
-                        → {(cond as any).action}
+                      <div className="mt-1 text-[10px] text-muted-foreground/60 border-t border-white/5 pt-1">
+                        <span className="text-white/40">ACTION →</span> {(cond as any).action}
                       </div>
                     )}
                   </div>
