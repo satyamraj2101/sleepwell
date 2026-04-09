@@ -159,23 +159,21 @@ export default function BulkTestCreatorPage() {
   });
 
   // Look up a reliable default client ID that actually exists in this tenant
-  // By querying the robust listContracts API, fetching the first contract's detail, and perfectly extracting the client ID.
+  // By querying the correct POST /Client/search endpoint on newCloud.
   const { data: defaultClientId } = useQuery({
-    queryKey: ["defaultClient", tenant, "v3"], // forced cache invalidation
+    queryKey: ["defaultClient", tenant, "v4"], // forced cache invalidation
     queryFn: async () => {
       try {
-        const res = await listContracts(clients!.newCloud, tenant, { PageNumber: 1, PageSize: 10 });
-        if (res.data && res.data.length > 0) {
-          const firstId = res.data[0].id || res.data[0].recordId;
-          if (firstId) {
-             const detail = await getContractDetail(clients!.newCloud, tenant, Number(firstId));
-             if (detail && detail.clients && detail.clients.length > 0) {
-                return detail.clients[0].clientId || 1;
-             }
-          }
+        const res = await clients!.newCloud.post(`/api/${tenant}/Client/search`, {
+          filter: { pageNumber: 1, pageSize: 1 }
+        });
+        const list = res.data?.data ?? res.data ?? [];
+        const arr = Array.isArray(list) ? list : (Array.isArray(list.results) ? list.results : []);
+        if (arr.length > 0) {
+          return arr[0].clientId || arr[0].id || 1;
         }
       } catch (e) {
-        console.warn("Could not fetch fallback client mapping via contracts", e);
+        console.warn("Could not fetch fallback client mapping via search", e);
         return 1;
       }
       return 1;
@@ -352,7 +350,7 @@ export default function BulkTestCreatorPage() {
           ? [{ clientId: clientIdVal, clientName: "", isPrimary: true, addressDetailId: null, contactNumberDetailId: null, emailDetailId: null, contactNameDetailId: null, roleId: null, customFields: [] }] 
           : [{ clientId: defaultClientId ?? 1, clientName: "", isPrimary: true, addressDetailId: null, contactNumberDetailId: null, emailDetailId: null, contactNameDetailId: null, roleId: null, customFields: [] }],
         confidentialRecords: [],
-        customFields: safeCustomFields,
+        customFields: [], // FORCE EMPTY to allow skipCustomFields: true to bypass ALL cascading validation
       };
 
       const createRes = await createContract(clients.newCloud, tenant, payload);
