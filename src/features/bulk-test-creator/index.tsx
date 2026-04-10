@@ -183,6 +183,7 @@ function extractApiError(e: any): string {
 
 interface ClientDetail {
   clientId: number;
+  roleId: number | null;
   addressDetailId: number | null;       // 0 = has address, no detail ID; null = no addresses
   contactNumberDetailId: number | null; // null = client has no contact numbers
   emailDetailId: number | null;         // null = client has no emails

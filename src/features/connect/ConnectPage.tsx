@@ -26,7 +26,6 @@ export default function ConnectPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
