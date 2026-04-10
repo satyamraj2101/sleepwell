@@ -38,6 +38,7 @@ interface FlatField extends IntakeFormField {
   groupName: string;
   groupType: string;
   sectionName: string;
+  isMandatory?: boolean; // From intake-form-field-groups API
 }
 
 interface TestRun {
@@ -62,9 +63,23 @@ interface TestRun {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── dummyValue: generate safe test data per field type ──────────────────────
 // Strategy: skip only known select/file/ID types that need real values.
 // Everything else falls through to a generic text value so required fields get filled.
+
+function isMandatory(f: FlatField): boolean {
+  if (f.isMandatory || f.isRequired) return true;
+  const name = (f.displayName || f.fieldName || "").toLowerCase();
+  // Broaden to catch common backend mandatory fields that might not be marked isMandatory in intake
+  return name.includes("primaid") || 
+         name.includes("primaryid") || 
+         name.includes("legalentity") || 
+         name.includes("legal entity") ||
+         name.includes("counterparty") ||
+         name.includes("organization") ||
+         name.includes("businessunit") ||
+         name.includes("country");
+}
+
 function dummyValue(field: FlatField, fallbackOpts?: Record<string, string> | null): string {
   const ft = (field.fieldType ?? "").toLowerCase().replace(/\s/g, "");
 
@@ -112,16 +127,17 @@ function buildInitialValues(
   const out: Record<string, string> = {};
   for (const f of fields) {
     const id = String(f.fieldId);
+    const mandatory = isMandatory(f);
     
     // Check mode
-    if (mode === "mandatory" && !f.isRequired) continue;
+    if (mode === "mandatory" && !mandatory) continue;
     if (mode === "custom" && !customSel.has(id)) continue;
     
     // Generate value
     let val = dummyValue(f, fallbackOptsMap?.[f.fieldId]);
     
     // Strict enforcement for required fields
-    if (f.isRequired && (!val || !val.trim())) {
+    if (mandatory && (!val || !val.trim())) {
       const ft = (f.fieldType ?? "").toLowerCase();
       val = (ft.includes("lookup") || ft.includes("user") || ft.includes("entity") || ft.includes("reference") || ft.includes("autocomplete")) 
         ? "1" 
@@ -189,16 +205,20 @@ function buildPayload(
     if (!field) continue;
 
     const ft = (field.fieldType ?? "").toLowerCase().replace(/\s/g, "");
+    const mandatory = isMandatory(field);
 
-    // Skip system/standard group fields
-    if (field.groupType === "Standard" || field.groupType === "System") continue;
-    
+    // Skip system/standard group fields UNLESS they are mandatory
+    if ((field.groupType === "Standard" || field.groupType === "System") && !mandatory) {
+      continue;
+    }
+
     // Skip complex entity reference fields since we cannot auto-generate valid foreign keys
+    // UNLESS they are mandatory (in which case we send a dummy ID)
     if (ft.includes("table") || ft.includes("file") || ft.includes("attachment") ||
         ft.includes("upload") || ft.includes("lookup") || ft.includes("entity") ||
         ft.includes("reference") || ft.includes("user") || ft.includes("autocomplete") || 
         ft.includes("guid") || ft.includes("department")) {
-      if (!field.isRequired) continue;
+      if (!mandatory) continue;
     }
 
     // For Select types, strictly enforce that the submitted value MUST be a known valid option.
@@ -214,7 +234,7 @@ function buildPayload(
       const allValid = [...intakeVals, ...metaVals, ...validVals].map(String);
       
       if (!allValid.includes(safeValue)) {
-        if (!field.isRequired) {
+        if (!mandatory) {
           continue;
         } else if (allValid.length > 0) {
           safeValue = allValid[0]; // Auto-correct mandatory select to first valid option
@@ -224,7 +244,9 @@ function buildPayload(
       }
     }
 
-    customFields.push({ customFieldId: fid, customFieldValue: safeValue });
+    if (field.groupType === "Custom") {
+      customFields.push({ customFieldId: fid, customFieldValue: safeValue });
+    }
   }
 
   const clientId = run.selectedClientId ?? globalClientId;
@@ -236,6 +258,8 @@ function buildPayload(
   };
   
   if (clientDetail) {
+    if (clientDetail.roleId) clientPayload.roleId = clientDetail.roleId;
+    // Priority: use valid detail IDs from the client profile
     if (clientDetail.addressDetailId) clientPayload.addressDetailId = clientDetail.addressDetailId;
     if (clientDetail.contactNumberDetailId) clientPayload.contactNumberDetailId = clientDetail.contactNumberDetailId;
     if (clientDetail.emailDetailId) clientPayload.emailDetailId = clientDetail.emailDetailId;
@@ -800,7 +824,14 @@ export default function BulkTestCreatorPage() {
       const mergedOpts = (f.selectOptions && Object.keys(f.selectOptions).length > 0)
         ? f.selectOptions
         : (metaOptsMap[f.fieldId] ?? f.selectOptions ?? null);
-      out.push({ ...f, selectOptions: mergedOpts, groupName, groupType, sectionName });
+      out.push({ 
+        ...f, 
+        selectOptions: mergedOpts, 
+        groupName, 
+        groupType, 
+        sectionName,
+        isMandatory: !!f.isMandatory 
+      });
     }
 
     for (const g of intakeGroups) {
@@ -840,37 +871,55 @@ export default function BulkTestCreatorPage() {
   useEffect(() => {
     if (allFields.length === 0) return;
 
-    // Try restoring saved selection from localStorage
+    // 1. Calculate the mandatory fields that MUST be checked
+    const mandatorySet = new Set(allFields.filter(isMandatory).map(f => String(f.fieldId)));
+
+    // 2. Try restoring saved selection from localStorage
+    let nextSet = new Set<string>();
     if (lsSelKey) {
       try {
         const saved = localStorage.getItem(lsSelKey);
         if (saved) {
           const parsed: string[] = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setCustomSelected(new Set(parsed));
-            if (lsValsKey) {
-              const savedVals = localStorage.getItem(lsValsKey);
-              if (savedVals) setGlobalValues(JSON.parse(savedVals));
-            }
-            return;
+          if (Array.isArray(parsed)) {
+            parsed.forEach(id => nextSet.add(id));
           }
         }
       } catch {}
     }
 
-    // No saved selection — pre-check mandatory fields
-    if (customSelected.size === 0) {
-      setCustomSelected(new Set(allFields.filter(f => f.isRequired).map(f => String(f.fieldId))));
+    // 3. ALWAYS merge mandatory fields into the set (user request: pre-selected)
+    mandatorySet.forEach(id => nextSet.add(id));
+
+    // 4. Update state
+    setCustomSelected(nextSet);
+
+    // 5. Restore saved values if possible
+    if (lsValsKey) {
+      try {
+        const savedVals = localStorage.getItem(lsValsKey);
+        if (savedVals) {
+          const parsedVals = JSON.parse(savedVals);
+          setGlobalValues(prev => ({ ...prev, ...parsedVals }));
+        }
+      } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allFields.length, lsSelKey]);
 
-  // When switching TO custom mode, pre-check mandatory if nothing selected yet
+  // When switching TO custom mode or mandatory mode, ensure state is synced
   useEffect(() => {
-    if (fillMode === "custom" && allFields.length > 0 && customSelected.size === 0) {
-      setCustomSelected(new Set(allFields.filter(f => f.isRequired).map(f => String(f.fieldId))));
+    if (fillMode === "custom" || fillMode === "mandatory") {
+      const mandatoryFields = allFields.filter(isMandatory);
+      if (mandatoryFields.length > 0) {
+        setCustomSelected(prev => {
+          const next = new Set(prev ?? []);
+          mandatoryFields.forEach(f => next.add(String(f.fieldId)));
+          return next;
+        });
+      }
     }
-  }, [fillMode]);
+  }, [fillMode, allFields]);
 
   // Persist custom selection + values to localStorage whenever they change
   useEffect(() => {
@@ -1037,7 +1086,7 @@ export default function BulkTestCreatorPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const mandatoryCount = allFields.filter(f => f.isRequired).length;
+  const mandatoryCount = allFields.filter(isMandatory).length;
   const selectedCount = fillMode === "mandatory" ? mandatoryCount
     : fillMode === "all" ? allFields.length
     : customSelected.size;
@@ -1232,7 +1281,8 @@ export default function BulkTestCreatorPage() {
                   <div className="overflow-y-auto max-h-[380px] divide-y divide-border/30">
                     {filteredFields.map(f => {
                       const id = String(f.fieldId);
-                      const isChecked = fillMode === "all" ? true : fillMode === "mandatory" ? f.isRequired : customSelected.has(id);
+                      const mandatory = isMandatory(f);
+                      const isChecked = fillMode === "all" ? true : fillMode === "mandatory" ? mandatory : customSelected.has(id);
                       const val = globalValues[id] ?? "";
                       const hasOptions = !!(f.selectOptions && Object.keys(f.selectOptions).length > 0) || !!(f.values?.length);
 
@@ -1244,21 +1294,21 @@ export default function BulkTestCreatorPage() {
                               <button
                                 onClick={() => {
                                   setCustomSelected(prev => {
-                                    const next = new Set(prev);
+                                    const next = new Set(prev ?? []);
                                     if (next.has(id)) next.delete(id); else next.add(id);
                                     return next;
                                   });
                                 }}
                                 className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
                               >
-                                {customSelected.has(id) ? <CheckSquare size={13} className="text-primary" /> : <Square size={13} />}
+                                {customSelected.has(id) || mandatory ? <CheckSquare size={13} className="text-primary" /> : <Square size={13} />}
                               </button>
                             ) : (
                               <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isChecked ? "bg-primary" : "bg-border")} />
                             )}
                             <span className="text-[11px] font-medium flex-1 min-w-0 truncate">
                               {f.displayName || f.fieldName}
-                              {f.isRequired && <span className="text-red-400 ml-0.5">*</span>}
+                              {mandatory && <span className="text-red-400 ml-0.5">*</span>}
                             </span>
                             <span className="text-[9px] text-muted-foreground/40 font-mono flex-shrink-0">{f.fieldType}</span>
                           </div>
