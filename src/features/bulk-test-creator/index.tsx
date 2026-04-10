@@ -5,6 +5,7 @@ import {
   FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download,
   XCircle, Loader2, Plus, Edit2, X, Search, Clock,
   Copy, ExternalLink, CheckSquare, Square, AlertTriangle, RotateCcw, Eye,
+  FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,9 +19,23 @@ import { getPreExecutionApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
-import type { IntakeFormField, ContractDetail, FieldOption } from "@/types";
+import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface VersionRecord {
+  versionId: number;
+  collaborationDocumentId?: number;
+  fileName?: string;
+  versionNumber?: number;
+  isGeneratedFromTemplate?: boolean;
+  isLocked?: boolean;
+  isPdf?: boolean;
+  isDocx?: boolean;
+  addedByName?: string;
+  addedOn?: string;
+  collaborators?: Array<{ id: number; userId: number; fullName?: string; email?: string; status?: string }>;
+}
 
 type FillMode = "mandatory" | "all" | "custom";
 type StepStatus = "idle" | "running" | "pass" | "fail" | "warn";
@@ -46,9 +61,13 @@ interface TestRun {
   index: number;
   appTypeId: number;
   appTypeName: string;
-  templateId?: number;
+  templateId?: number;       // global template (from Setup, or auto-selected)
   templateName?: string;
+  selectedTemplateId?: number;  // per-run override (only shown when multiple templates)
+  selectedTemplateName?: string;
   requestId?: number;
+  generatedVersionId?: number;  // versionId from version-history after run
+  generatedFileName?: string;
   status: RunStatus;
   steps: TestStep[];
   startedAt?: number;
@@ -59,6 +78,13 @@ interface TestRun {
   editOpen: boolean;
   error?: string;
   currentStage?: string;
+  approvals?: PreExecutionApproval[];
+  contractAssignees?: AssigneeRef[];
+  contractClients?: ClientRef[];
+  contractParties?: LegalPartyRef[];
+  requesterName?: string;
+  versions?: VersionRecord[];
+  actionTaken?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -270,7 +296,7 @@ function buildPayload(
   return {
     id: run.requestId ?? 0,
     applicationTypeId: run.appTypeId,
-    contractTemplateId: run.templateId ?? 0,
+    contractTemplateId: run.selectedTemplateId ?? run.templateId ?? 0,
     requestTypeId: 1,
     recordId: 0,
     isUploadedContract: false,
@@ -310,13 +336,124 @@ function exportCSV(runs: TestRun[]) {
 
 function buildSteps(): TestStep[] {
   return [
-    { id: "create",    label: "Create / Update",    status: "idle" },
-    { id: "generate",  label: "Document Gen",       status: "idle" },
-    { id: "fetch",     label: "Fetch & Verify",      status: "idle" },
-    { id: "approvals", label: "Approval Check",      status: "idle" },
-    { id: "stage",     label: "Workflow Stage",       status: "idle" },
-    { id: "fields",    label: "Metadata Audit",       status: "idle" },
+    { id: "create",    label: "Create / Update",  status: "idle" },
+    { id: "version",   label: "Version History",  status: "idle" },
+    { id: "fetch",     label: "Fetch & Verify",   status: "idle" },
+    { id: "approvals", label: "Approval Check",   status: "idle" },
+    { id: "stage",     label: "Workflow Stage",   status: "idle" },
+    { id: "fields",    label: "Metadata Audit",   status: "idle" },
   ];
+}
+
+// ─── File Preview Dialog ──────────────────────────────────────────────────────
+function FilePreviewDialog({
+  versionId, fileName, tenant, newCloudApi, token, onClose,
+}: {
+  versionId: number;
+  fileName: string;
+  tenant: string;
+  newCloudApi: string;
+  token: string;
+  onClose: () => void;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const isPdf = fileName.toLowerCase().endsWith(".pdf");
+
+  useEffect(() => {
+    let url: string | null = null;
+    setLoading(true);
+    setError(null);
+
+    // Fetch as blob using fetch() directly (axios responseType blob also works)
+    const fmt = isPdf ? "pdf" : "docx";
+    fetch(`https://${newCloudApi}/api/${tenant}/version/${versionId}/download?format=${fmt}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.blob();
+      })
+      .then(blob => {
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+        setLoading(false);
+      })
+      .catch(e => {
+        setError(e.message);
+        setLoading(false);
+      });
+
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [versionId, tenant, newCloudApi, token, isPdf]);
+
+  const handleDownload = () => {
+    if (!blobUrl) return;
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName || `version-${versionId}.${isPdf ? "pdf" : "docx"}`;
+    a.click();
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1100]" onClick={onClose} />
+      <div className="fixed inset-4 md:inset-8 bg-[#0f1117] border border-white/10 rounded-2xl z-[1101] flex flex-col shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.07] flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <FileText size={15} className="text-amber-400" />
+            <div>
+              <span className="text-[13px] font-semibold text-white">{fileName || `Version ${versionId}`}</span>
+              <span className="text-[10px] text-white/30 ml-2">· version ID {versionId}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm" variant="outline"
+              className="h-7 gap-1.5 text-xs border-white/10 text-white/70 hover:text-white"
+              onClick={handleDownload} disabled={!blobUrl}
+            >
+              <Download size={11} /> Download {isPdf ? "PDF" : "DOCX"}
+            </Button>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06] transition-all">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 min-h-0 relative">
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <Loader2 size={28} className="animate-spin text-amber-400" />
+              <span className="text-[12px] text-white/40">Loading document…</span>
+            </div>
+          )}
+          {error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <AlertCircle size={28} className="text-red-400" />
+              <p className="text-[12px] text-red-400">{error}</p>
+              <p className="text-[11px] text-white/30">Use the Download button above to save the file.</p>
+            </div>
+          )}
+          {blobUrl && isPdf && (
+            <iframe src={blobUrl} className="w-full h-full border-0" title="Document preview" />
+          )}
+          {blobUrl && !isPdf && !loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+              <FileText size={48} className="text-white/10" />
+              <p className="text-[13px] text-white/50">DOCX preview is not available in browser.</p>
+              <Button size="sm" className="gap-1.5 bg-amber-500 hover:bg-amber-400 text-black" onClick={handleDownload}>
+                <Download size={13} /> Download DOCX to view
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
 }
 
 // ─── Small UI Components ──────────────────────────────────────────────────────
@@ -374,7 +511,9 @@ function StepPill({ step }: { step: TestStep }) {
 function RunCard({
   run, allFields, cloudInstance, liveClients, liveParties,
   onRun, onDelete, onToggleEdit,
-  onFieldChange, onClientChange, onPartyChange, onSaveAndRerun, onViewContract, isRunningAll,
+  onFieldChange, onClientChange, onPartyChange, onTemplateChange,
+  onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, isRunningAll,
+  newCloudApi, token,
 }: {
   run: TestRun;
   allFields: FlatField[];
@@ -387,16 +526,21 @@ function RunCard({
   onFieldChange: (fieldId: string, value: string) => void;
   onClientChange: (id: number | null) => void;
   onPartyChange: (id: number | null) => void;
+  onTemplateChange: (id: number | null, name: string | undefined) => void;
   onSaveAndRerun: () => void;
   onViewContract: () => void;
+  onPreviewDoc: () => void;
+  onPreviewVersion: (versionId: number, fileName: string) => void;
   isRunningAll: boolean;
+  newCloudApi: string;
+  token: string;
 }) {
   const { tenant } = useAuthStore();
   const isRun = run.status === "running";
   const isErr = run.status === "error";
   const isDone = run.status === "done";
+  const [detailsOpen, setDetailsOpen] = useState(true);
 
-  // Group fields by section for the edit form
   const groupedForEdit = useMemo(() => {
     const groups: Record<string, FlatField[]> = {};
     for (const f of allFields) {
@@ -410,6 +554,23 @@ function RunCard({
   const fieldCount = Object.keys(run.fieldValues).length;
   const filledCount = Object.values(run.fieldValues).filter(Boolean).length;
 
+  // All collaborators/signatories from all versions
+  const allSignatories = useMemo(() => {
+    const seen = new Set<number>();
+    const out: Array<{ id: number; userId: number; fullName?: string; email?: string }> = [];
+    for (const v of (run.versions ?? [])) {
+      for (const c of (v.collaborators ?? [])) {
+        if (c.userId && !seen.has(c.userId)) {
+          seen.add(c.userId);
+          out.push(c);
+        }
+      }
+    }
+    return out;
+  }, [run.versions]);
+
+  const hasDetails = isDone || isErr;
+
   return (
     <div className={cn(
       "border rounded-xl bg-card overflow-hidden transition-all duration-200",
@@ -418,9 +579,9 @@ function RunCard({
       isRun ? "border-blue-500/40 ring-1 ring-blue-500/20" :
       "border-border"
     )}>
+
       {/* ── Header ── */}
       <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-        {/* Status icon */}
         <div className={cn(
           "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold",
           isDone ? "bg-emerald-500/10 text-emerald-500" :
@@ -432,60 +593,70 @@ function RunCard({
            isRun ? <Loader2 size={14} className="animate-spin" /> : run.index}
         </div>
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">Run #{run.index}</span>
             {run.requestId && (
               <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-muted border border-border px-1.5 py-0.5 rounded">
                 REQ-{run.requestId}
-                <button
-                  onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Copied"); }}
-                  className="hover:text-foreground text-muted-foreground"
-                ><Copy size={9} /></button>
-                <a
-                  href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : "IntegreonPG"}/#/contract-snapshot/${run.requestId}`}
-                  target="_blank" rel="noreferrer"
-                  className="text-blue-400 hover:text-blue-300"
-                ><ExternalLink size={9} /></a>
+                <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Copied"); }} className="hover:text-foreground text-muted-foreground"><Copy size={9} /></button>
+                <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300"><ExternalLink size={9} /></a>
               </span>
             )}
             {run.currentStage && (
               <span className={cn(
-                "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" :
-                "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border",
+                run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                run.currentStage.toLowerCase().includes("negotiat") ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                run.currentStage.toLowerCase().includes("approv") ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
               )}>
-                {run.currentStage}
+                <GitBranch size={8} className="inline mr-0.5" />{run.currentStage}
+              </span>
+            )}
+            {run.actionTaken && isDone && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-teal-500/10 border border-teal-500/20 text-teal-400">
+                Action Taken
               </span>
             )}
             {isErr && <span className="text-[10px] text-red-400 font-medium ml-auto">Failed</span>}
-            {isDone && <span className="text-[10px] text-emerald-400 font-medium ml-auto">Completed</span>}
+            {isDone && <span className="text-[10px] text-emerald-400 font-medium ml-auto">✓ Pass</span>}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {run.appTypeName}
-            {run.templateName && <> · {run.templateName}</>}
-            {fieldCount > 0 && <> · {filledCount}/{fieldCount} fields set</>}
-            {run.startedAt && run.finishedAt && (
-              <> · {((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s</>
+          <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
+            <span>{run.appTypeName}</span>
+            {(run.templateName || run.selectedTemplateName) && (
+              <span className="text-amber-400/70">· {run.selectedTemplateName || run.templateName}</span>
+            )}
+            {fieldCount > 0 && <span>· {filledCount}/{fieldCount} fields</span>}
+            {run.startedAt && run.finishedAt && <span>· {((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s</span>}
+            {(run.versions?.length ?? 0) > 0 && (
+              <span className="text-emerald-400">· {run.versions!.length} version{run.versions!.length !== 1 ? "s" : ""}</span>
             )}
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Action buttons */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Button
-            size="sm" variant="outline" className="h-7 gap-1 text-xs"
-            onClick={onToggleEdit}
-          >
-            <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit Fields"}
+          {hasDetails && (
+            <button
+              onClick={() => setDetailsOpen(o => !o)}
+              className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              title={detailsOpen ? "Collapse details" : "Expand details"}
+            >
+              {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
+          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={onToggleEdit}>
+            <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit"}
           </Button>
           {run.requestId && isDone && (
-            <Button
-              size="sm" variant="outline" className="h-7 gap-1 text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10"
-              onClick={onViewContract}
-            >
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10" onClick={onViewContract}>
               <Eye size={11} /> View
+            </Button>
+          )}
+          {run.generatedVersionId && isDone && (
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={onPreviewDoc}>
+              <FileText size={11} /> Preview
             </Button>
           )}
           {!isRunningAll && (
@@ -522,6 +693,206 @@ function RunCard({
         </div>
       )}
 
+      {/* ── Rich Details Panel ── */}
+      {hasDetails && detailsOpen && (
+        <div className="border-t border-border/20 bg-muted/5">
+
+          {/* Versions section */}
+          {(run.versions?.length ?? 0) > 0 && (
+            <div className="px-4 py-3 border-b border-border/20">
+              <div className="flex items-center gap-1.5 mb-2">
+                <FileText size={11} className="text-emerald-400" />
+                <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+                  Versions ({run.versions!.length})
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {run.versions!.map((v, i) => (
+                  <div key={v.versionId} className={cn(
+                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border",
+                    v.versionId === run.generatedVersionId
+                      ? "bg-emerald-500/8 border-emerald-500/20"
+                      : "bg-muted/20 border-border/50"
+                  )}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-medium text-foreground truncate">
+                          {v.fileName || `Version ${v.versionId}`}
+                        </span>
+                        {v.versionId === run.generatedVersionId && (
+                          <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-semibold uppercase">Active</span>
+                        )}
+                        {v.isGeneratedFromTemplate && (
+                          <span className="text-[8px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">From Template</span>
+                        )}
+                        {v.isLocked && (
+                          <span className="text-[8px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">Locked</span>
+                        )}
+                      </div>
+                      {v.addedByName && (
+                        <span className="text-[9px] text-muted-foreground">by {v.addedByName}</span>
+                      )}
+                      {/* Collaborators on this version */}
+                      {(v.collaborators?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {v.collaborators!.map((c, ci) => (
+                            <span key={ci} className="inline-flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400" title={c.email || undefined}>
+                              <Users size={7} /> {c.fullName || c.email || `User #${c.userId}`}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => onPreviewVersion(v.versionId, v.fileName ?? `version-${v.versionId}.pdf`)}
+                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-400 border border-border hover:border-emerald-500/30 transition-all"
+                        title="Preview"
+                      >
+                        <Eye size={9} />
+                      </button>
+                      <a
+                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=pdf`}
+                        target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all"
+                        title="Download PDF"
+                      >
+                        <Download size={9} /> PDF
+                      </a>
+                      <a
+                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=docx`}
+                        target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 border border-border hover:border-amber-500/30 transition-all"
+                        title="Download DOCX"
+                      >
+                        <Download size={9} /> DOCX
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* People: Assignees + Approvals + Signatories */}
+          <div className="px-4 py-3 border-b border-border/20 grid grid-cols-1 gap-3 sm:grid-cols-3">
+
+            {/* Assignees */}
+            <div>
+              <div className="flex items-center gap-1 mb-1.5">
+                <Users size={10} className="text-indigo-400" />
+                <span className="text-[9px] font-semibold text-indigo-400 uppercase tracking-wider">Assignees</span>
+              </div>
+              {(run.contractAssignees?.length ?? 0) > 0 ? (
+                <div className="space-y-1">
+                  {run.contractAssignees!.map((a, i) => (
+                    <div key={i} className={cn(
+                      "flex items-center gap-1.5 px-2 py-1 rounded border text-[10px]",
+                      a.isPrimary ? "bg-indigo-500/8 border-indigo-500/20 text-indigo-300" : "bg-muted/20 border-border/50 text-muted-foreground"
+                    )}>
+                      <span className="flex-1 truncate">{a.userName || `User #${a.userId}`}</span>
+                      {a.isPrimary && <span className="text-[7px] text-indigo-400/70 font-bold">PRIMARY</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : <span className="text-[10px] text-muted-foreground/40">None</span>}
+            </div>
+
+            {/* Approvals */}
+            <div>
+              <div className="flex items-center gap-1 mb-1.5">
+                <Shield size={10} className="text-amber-400" />
+                <span className="text-[9px] font-semibold text-amber-400 uppercase tracking-wider">Approvals</span>
+              </div>
+              {(run.approvals?.length ?? 0) > 0 ? (
+                <div className="space-y-1">
+                  {run.approvals!.map((a, i) => (
+                    <div key={i} className={cn(
+                      "px-2 py-1 rounded border text-[10px]",
+                      a.status === "Approved" ? "bg-emerald-500/8 border-emerald-500/20" :
+                      a.status === "Rejected" ? "bg-red-500/8 border-red-500/20" :
+                      "bg-amber-500/8 border-amber-500/20"
+                    )} title={a.condition || undefined}>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={cn("truncate",
+                          a.status === "Approved" ? "text-emerald-400" :
+                          a.status === "Rejected" ? "text-red-400" : "text-amber-400"
+                        )}>{a.approverName}</span>
+                        <span className={cn("text-[8px] font-bold flex-shrink-0",
+                          a.status === "Approved" ? "text-emerald-400" :
+                          a.status === "Rejected" ? "text-red-400" : "text-amber-400/70"
+                        )}>{a.status.toUpperCase()}</span>
+                      </div>
+                      {a.approverRole && <div className="text-[9px] opacity-50 truncate">{a.approverRole}</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : <span className="text-[10px] text-emerald-400/60">No approvals required</span>}
+            </div>
+
+            {/* Signatories (collaborators) */}
+            <div>
+              <div className="flex items-center gap-1 mb-1.5">
+                <Users size={10} className="text-purple-400" />
+                <span className="text-[9px] font-semibold text-purple-400 uppercase tracking-wider">Signatories</span>
+              </div>
+              {allSignatories.length > 0 ? (
+                <div className="space-y-1">
+                  {allSignatories.map((s, i) => (
+                    <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded border border-purple-500/20 bg-purple-500/8 text-[10px] text-purple-300">
+                      <span className="flex-1 truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
+                      {s.email && <span className="text-[8px] opacity-40 truncate">{s.email}</span>}
+                    </div>
+                  ))}
+                </div>
+              ) : <span className="text-[10px] text-muted-foreground/40">None assigned</span>}
+            </div>
+          </div>
+
+          {/* Context: Clients, Parties, Requester */}
+          <div className="px-4 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+            {run.requesterName && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">By</span>
+                <span className="text-[10px] text-foreground/70">{run.requesterName}</span>
+              </div>
+            )}
+            {(run.contractClients?.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Clients</span>
+                <div className="flex gap-1">
+                  {run.contractClients!.map((c, i) => (
+                    <span key={i} className={cn(
+                      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
+                      c.isPrimary ? "bg-amber-500/10 border-amber-500/25 text-amber-400" : "bg-muted/30 border-border text-muted-foreground"
+                    )}>
+                      {c.clientName ?? `#${c.clientId}`}
+                      {c.isPrimary && <span className="text-[7px]">★</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(run.contractParties?.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Parties</span>
+                <div className="flex gap-1">
+                  {run.contractParties!.map((p, i) => (
+                    <span key={i} className={cn(
+                      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
+                      p.isPrimary ? "bg-purple-500/10 border-purple-500/25 text-purple-400" : "bg-muted/30 border-border text-muted-foreground"
+                    )}>
+                      {p.name ?? `#${p.legalPartyId}`}
+                      {p.isPrimary && <span className="text-[7px]">★</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Inline Edit Form ── */}
       {run.editOpen && (
         <div className="border-t border-border/50 bg-muted/10">
@@ -532,6 +903,7 @@ function RunCard({
             </Button>
           </div>
           <div className="px-4 py-3 max-h-96 overflow-y-auto space-y-4">
+
             {/* Client & Party overrides per run */}
             <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border/30">
               <div>
@@ -600,7 +972,7 @@ function RunCard({
 
 export default function BulkTestCreatorPage() {
   const clients = useApiClients();
-  const { tenant, username, cloudInstance } = useAuthStore();
+  const { tenant, username, cloudInstance, newCloudApi, token } = useAuthStore();
 
   // Config
   const [selAppTypeId, setSelAppTypeId] = useState<number | null>(null);
@@ -624,6 +996,8 @@ export default function BulkTestCreatorPage() {
 
   // Contract edit drawer (view/edit a created contract)
   const [viewContractId, setViewContractId] = useState<number | null>(null);
+  // Document preview dialog
+  const [previewVersion, setPreviewVersion] = useState<{ versionId: number; fileName: string } | null>(null);
   const qc = useQueryClient();
 
   // ── Queries ────────────────────────────────────────────────────────────────
@@ -658,6 +1032,16 @@ export default function BulkTestCreatorPage() {
     },
     enabled: !!clients && !!selAppTypeId,
   });
+
+  // Auto-select when exactly one template available; clear when app type changes
+  useEffect(() => {
+    if (templates.length === 1) {
+      setSelTemplateId(templates[0].contractTemplateId || templates[0].id);
+    } else if (templates.length === 0) {
+      setSelTemplateId(null);
+    }
+    // When multiple templates: keep selTemplateId as "global fallback" (can be null = each run picks)
+  }, [templates.length]);
 
   const { data: intakeGroups = [], isLoading: intakeLoading } = useQuery({
     queryKey: ["intakeFieldsTC", tenant, selAppTypeId],
@@ -1017,39 +1401,111 @@ export default function BulkTestCreatorPage() {
         patchRun(run.id, { requestId });
       }
 
-      // Step 2: Document Generation (Generate Version)
-      if (run.templateId) {
-        patchStep(run.id, "generate", { status: "running" });
-        const tg = Date.now();
+      // Step 2: Version Generation + History
+      // Explicitly trigger document generation via API, then fetch version history.
+      const effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
+      patchStep(run.id, "version", { status: "running" });
+      const tg = Date.now();
+
+      if (effectiveTemplateId && !run.requestId) {
+        // New contract with template: explicitly call generate-version so Leah creates the document
         try {
-          await generateContractVersion(clients.newCloud, tenant, { 
-            requestId: requestId!, 
-            contractTemplateId: run.templateId 
+          await generateContractVersion(clients.newCloud, tenant, {
+            requestId: Number(requestId),
+            contractTemplateId: effectiveTemplateId,
           });
-          patchStep(run.id, "generate", { status: "pass", result: "Version generated", durationMs: Date.now() - tg });
-        } catch (e: any) {
-          patchStep(run.id, "generate", { status: "warn", result: "Gen failed", durationMs: Date.now() - tg });
+          await new Promise(r => setTimeout(r, 2500)); // wait for async generation
+        } catch {
+          // If generate-version fails, still try version-history (might have auto-generated)
+          await new Promise(r => setTimeout(r, 2000));
         }
-      } else {
-        patchStep(run.id, "generate", { status: "idle", result: "No template" });
       }
 
-      // Step 3: Fetch & Verify
+      try {
+        const vhRes = await clients.newCloud.get(
+          `/api/${tenant}/collaboration/version-history`,
+          { params: { RequestId: requestId } }
+        );
+        const raw: any[] = Array.isArray(vhRes.data?.data) ? vhRes.data.data
+          : Array.isArray(vhRes.data) ? vhRes.data : [];
+
+        // Normalize to VersionRecord[]
+        const allVersions: VersionRecord[] = raw.map((v: any) => ({
+          versionId: Number(v.versionId ?? v.collaborationDocumentId ?? 0),
+          collaborationDocumentId: Number(v.collaborationDocumentId ?? 0),
+          fileName: v.fileName ?? null,
+          versionNumber: v.versionNumber ?? null,
+          isGeneratedFromTemplate: !!v.isGeneratedFromTemplate,
+          isLocked: !!v.isLocked,
+          isPdf: v.fileName?.toLowerCase().endsWith('.pdf') ?? false,
+          isDocx: v.fileName?.toLowerCase().endsWith('.docx') ?? false,
+          addedByName: v.addedByName ?? v.fullName ?? null,
+          addedOn: v.addedOn ?? null,
+          collaborators: Array.isArray(v.collaborators) ? v.collaborators.map((c: any) => ({
+            id: c.id, userId: c.userId, fullName: c.fullName, email: c.email, status: c.status,
+          })) : [],
+        })).filter(v => v.versionId > 0);
+
+        // Pick the best version for single-doc preview
+        const primary = allVersions.find(v => v.isGeneratedFromTemplate) ?? allVersions[0];
+
+        if (allVersions.length > 0 && primary) {
+          patchRun(run.id, {
+            generatedVersionId: primary.versionId,
+            generatedFileName: primary.fileName ?? `version-${primary.versionId}`,
+            versions: allVersions,
+          });
+          patchStep(run.id, "version", {
+            status: "pass",
+            result: `${allVersions.length} version${allVersions.length !== 1 ? "s" : ""} · ${primary.fileName ?? `v${primary.versionId}`}`,
+            durationMs: Date.now() - tg,
+          });
+        } else {
+          patchRun(run.id, { versions: [] });
+          patchStep(run.id, "version", {
+            status: effectiveTemplateId ? "warn" : "idle",
+            result: effectiveTemplateId ? "No version generated" : "No template selected",
+            durationMs: Date.now() - tg,
+          });
+        }
+      } catch {
+        patchStep(run.id, "version", { status: "warn", result: "Version history unavailable", durationMs: Date.now() - tg });
+      }
+
+      // Step 3: Fetch & Verify + action-taken
       patchStep(run.id, "fetch", { status: "running" });
       const t1 = Date.now();
-      const detail = await getContractDetail(clients.newCloud, tenant, requestId!);
+      const [detail, actionTaken] = await Promise.all([
+        getContractDetail(clients.newCloud, tenant, requestId!),
+        clients.newCloud.get(`/api/${tenant}/contract-request/action-taken/${requestId}`)
+          .then(r => Boolean(r.data?.data ?? r.data)).catch(() => false),
+      ]);
       const stage = (detail as any)?.workflowStage ?? (detail as any)?.currentStage ?? "Unknown";
       patchStep(run.id, "fetch", { status: "pass", result: `Stage: ${stage}`, durationMs: Date.now() - t1 });
-      patchRun(run.id, { currentStage: stage });
+      patchRun(run.id, {
+        currentStage: stage,
+        actionTaken,
+        contractAssignees: (detail.assignees ?? []) as AssigneeRef[],
+        contractClients: (detail.clients ?? []) as ClientRef[],
+        contractParties: (detail.legalParties ?? []) as LegalPartyRef[],
+        requesterName: (detail.requesterUser as any)?.fullName ?? (detail.requesterUser as any)?.userName ?? undefined,
+      });
 
-      // Step 3: Approvals
+      // Step 4: Approvals
       patchStep(run.id, "approvals", { status: "running" });
       const t2 = Date.now();
       try {
         const appRes: any = await getPreExecutionApprovals(clients.newCloud, tenant, requestId!);
-        const list = appRes?.data?.approvals ?? appRes?.approvals ?? appRes?.data ?? [];
+        // Handle Leah double-wrap: { data: { data: { approvals: [] } } } OR { data: { approvals: [] } }
+        const inner = appRes?.data?.data ?? appRes?.data ?? appRes;
+        const list: PreExecutionApproval[] = inner?.approvals ?? appRes?.approvals ?? [];
         const count = Array.isArray(list) ? list.length : 0;
-        patchStep(run.id, "approvals", { status: "pass", result: `${count} approval trigger${count !== 1 ? "s" : ""}`, durationMs: Date.now() - t2 });
+        patchRun(run.id, { approvals: Array.isArray(list) ? list : [] });
+        patchStep(run.id, "approvals", {
+          status: count > 0 ? "warn" : "pass",
+          result: count > 0 ? `${count} approval trigger${count !== 1 ? "s" : ""}` : "No approvals required",
+          durationMs: Date.now() - t2,
+        });
       } catch {
         patchStep(run.id, "approvals", { status: "warn", result: "Approval graph unavailable", durationMs: Date.now() - t2 });
       }
@@ -1169,19 +1625,53 @@ export default function BulkTestCreatorPage() {
                 </select>
               </div>
 
-              {/* Template */}
+              {/* Template — smart selection */}
               {selAppTypeId && (
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Template (optional)</label>
-                  <select
-                    value={selTemplateId ?? ""}
-                    onChange={e => setSelTemplateId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full h-9 text-sm bg-background border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    <option value="">None</option>
-                    {templatesLoading ? <option disabled>Loading…</option> :
-                      templates.map(t => <option key={t.contractTemplateId || t.id} value={t.contractTemplateId || t.id}>{t.contractTemplateName || t.name}</option>)}
-                  </select>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Template
+                    {!templatesLoading && templates.length === 1 && (
+                      <span className="ml-1.5 normal-case font-normal text-emerald-400">(auto-selected)</span>
+                    )}
+                    {!templatesLoading && templates.length > 1 && (
+                      <span className="ml-1.5 normal-case font-normal text-amber-400">({templates.length} available — pick per run)</span>
+                    )}
+                    {!templatesLoading && templates.length === 0 && (
+                      <span className="ml-1.5 normal-case font-normal text-muted-foreground">(none for this type)</span>
+                    )}
+                  </label>
+
+                  {templatesLoading ? (
+                    <div className="h-9 flex items-center px-2 text-xs text-muted-foreground border border-border rounded-md">
+                      <Loader2 size={11} className="animate-spin mr-1.5" /> Loading templates…
+                    </div>
+                  ) : templates.length === 0 ? (
+                    <div className="h-9 flex items-center px-2 text-xs text-muted-foreground border border-border/50 rounded-md bg-muted/20">
+                      No templates — contract created without document
+                    </div>
+                  ) : templates.length === 1 ? (
+                    /* Auto-select the only template — no picker needed */
+                    <div className="h-9 flex items-center gap-2 px-2.5 text-xs border border-emerald-500/30 bg-emerald-500/5 rounded-md">
+                      <CheckCircle2 size={11} className="text-emerald-400 flex-shrink-0" />
+                      <span className="text-foreground font-medium truncate">
+                        {templates[0].contractTemplateName || templates[0].name}
+                      </span>
+                    </div>
+                  ) : (
+                    /* Multiple templates — global fallback only; per-run picker shown in RunCard */
+                    <select
+                      value={selTemplateId ?? ""}
+                      onChange={e => setSelTemplateId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full h-9 text-sm bg-background border border-amber-500/30 rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                    >
+                      <option value="">— Each run picks its own template —</option>
+                      {templates.map(t => (
+                        <option key={t.contractTemplateId || t.id} value={t.contractTemplateId || t.id}>
+                          {t.contractTemplateName || t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
 
@@ -1421,6 +1911,7 @@ export default function BulkTestCreatorPage() {
               cloudInstance={cloudInstance || ""}
               liveClients={liveClients}
               liveParties={liveParties}
+              templates={templates}
               isRunningAll={isRunningAll}
               onRun={() => executeRun(run)}
               onDelete={() => setRuns(prev => prev.filter(r => r.id !== run.id))}
@@ -1434,8 +1925,10 @@ export default function BulkTestCreatorPage() {
               }}
               onClientChange={(id) => patchRun(run.id, { selectedClientId: id })}
               onPartyChange={(id) => patchRun(run.id, { selectedPartyId: id })}
+              onTemplateChange={(id, name) => patchRun(run.id, { selectedTemplateId: id ?? undefined, selectedTemplateName: name })}
               onSaveAndRerun={() => executeRun(run)}
               onViewContract={() => run.requestId && setViewContractId(run.requestId)}
+              onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
             />
           ))}
         </div>
@@ -1455,6 +1948,18 @@ export default function BulkTestCreatorPage() {
         }}
         saving={updateMutation.isPending}
         saveError={updateMutation.isError ? (updateMutation.error as Error).message : null}
+      />
+    )}
+
+    {/* ── Document preview dialog ── */}
+    {previewVersion && (
+      <FilePreviewDialog
+        versionId={previewVersion.versionId}
+        fileName={previewVersion.fileName}
+        tenant={tenant}
+        newCloudApi={newCloudApi}
+        token={token ?? ""}
+        onClose={() => setPreviewVersion(null)}
       />
     )}
     </>
