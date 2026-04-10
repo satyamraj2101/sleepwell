@@ -17,7 +17,7 @@ const schema = z.object({
   tenant:        z.string().min(1, "Required"),
   username:      z.string().email("Valid email required"),
   password:      z.string().min(1, "Required"),
-  securityCheck: z.string().min(1, "Required"),
+  securityCheck: z.string().min(1, "Master Code Required"),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -36,17 +36,15 @@ export default function ConnectPage() {
       tenant:        store.tenant        || "integreonpg",
       username:      store.username      || "",
       password:      "",
-      securityCheck: today,
+      securityCheck: "",
     },
   });
 
   const onSubmit = async (values: FormValues) => {
-    // Security check: must be exactly currentYear + 2
-    const d = new Date(values.securityCheck);
-    const expected = new Date().getFullYear() + 2;
-    if (d.getFullYear() !== expected) {
-      toast.error("Oh ho", {
-        description: "You need to take permission from him to access this.",
+    // Master Code Security
+    if (values.securityCheck !== "12069") {
+      toast.error("Access Denied", {
+        description: "Invalid Master Code. Please contact your administrator.",
       });
       return;
     }
@@ -95,7 +93,7 @@ export default function ConnectPage() {
               { name: "tenant"        as const, label: "Tenant",          placeholder: "pentair" },
               { name: "username"      as const, label: "Username",        placeholder: "yashraj.singh@integreon.com" },
               { name: "password"      as const, label: "Password",        placeholder: "••••••••", type: "password" },
-              { name: "securityCheck" as const, label: "Security Verification", type: "date" },
+              { name: "securityCheck" as const, label: "Master Verification Code", type: "password", placeholder: "•••••" },
             ].map(({ name, label, placeholder, type }) => (
               <div key={name}>
                 <Label htmlFor={name} className="text-xs mb-1 block">{label}</Label>

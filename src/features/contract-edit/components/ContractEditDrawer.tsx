@@ -1,7 +1,7 @@
 import { useState, useCallback, memo } from "react";
 import {
   X, Save, AlertCircle, CheckCircle2, FileText, User, Calendar,
-  Layers, Shield, Briefcase, ChevronDown, RotateCcw,
+  Layers, Shield, Briefcase, ChevronDown, RotateCcw, Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +116,21 @@ export function ContractEditDrawer({
                   </div>
                 ))}
               </div>
+
+              {/* Clients */}
+              {detail.clients?.length > 0 && (
+                <div>
+                  <SectionLabel icon={Building2}>Clients</SectionLabel>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {detail.clients.map((c, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[12px] font-medium bg-amber-500/8 border border-amber-500/20 text-amber-300 px-3 py-1.5 rounded-lg">
+                        {c.clientName ?? `Client #${c.clientId}`}
+                        {c.isPrimary && <span className="text-[9px] font-bold text-amber-400/80 uppercase">Primary</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Legal parties */}
               {detail.legalParties?.length > 0 && (

@@ -63,6 +63,9 @@ export const useAuthStore = create<AuthState>()(
         newCloudApi: state.newCloudApi,
         tenant: state.tenant,
         username: state.username,
+        token: state.token,
+        tokenExpiresAt: state.tokenExpiresAt,
+        isConnected: state.isConnected,
       }),
     }
   )
