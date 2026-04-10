@@ -310,3 +310,15 @@ export async function bulkUpdateStage(
   return res.data;
 }
 
+// POST /api/{tenant}/contract-request-document/generate-version
+export async function generateContractVersion(
+  client: AxiosInstance,
+  tenant: string,
+  payload: { requestId: number; contractTemplateId: number }
+): Promise<ApiResponse<string>> {
+  const res = await client.post<ApiResponse<string>>(
+    `/api/${tenant}/contract-request-document/generate-version`,
+    payload
+  );
+  return res.data;
+}

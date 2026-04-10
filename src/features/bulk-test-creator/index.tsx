@@ -12,7 +12,7 @@ import { PageHeader, Spinner } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
-import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload } from "@/api/contractRequest";
+import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, generateContractVersion } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
 import { getPreExecutionApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
@@ -310,6 +310,7 @@ function exportCSV(runs: TestRun[]) {
 function buildSteps(): TestStep[] {
   return [
     { id: "create",    label: "Create / Update",    status: "idle" },
+    { id: "generate",  label: "Document Gen",       status: "idle" },
     { id: "fetch",     label: "Fetch & Verify",      status: "idle" },
     { id: "approvals", label: "Approval Check",      status: "idle" },
     { id: "stage",     label: "Workflow Stage",       status: "idle" },
@@ -389,6 +390,7 @@ function RunCard({
   onViewContract: () => void;
   isRunningAll: boolean;
 }) {
+  const { tenant } = useAuthStore();
   const isRun = run.status === "running";
   const isErr = run.status === "error";
   const isDone = run.status === "done";
@@ -441,7 +443,7 @@ function RunCard({
                   className="hover:text-foreground text-muted-foreground"
                 ><Copy size={9} /></button>
                 <a
-                  href={`https://${cloudInstance}/#/contract-request/${run.requestId}`}
+                  href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : "IntegreonPG"}/#/contract-snapshot/${run.requestId}`}
                   target="_blank" rel="noreferrer"
                   className="text-blue-400 hover:text-blue-300"
                 ><ExternalLink size={9} /></a>
@@ -1014,7 +1016,24 @@ export default function BulkTestCreatorPage() {
         patchRun(run.id, { requestId });
       }
 
-      // Step 2: Fetch & Verify
+      // Step 2: Document Generation (Generate Version)
+      if (run.templateId) {
+        patchStep(run.id, "generate", { status: "running" });
+        const tg = Date.now();
+        try {
+          await generateContractVersion(clients.newCloud, tenant, { 
+            requestId: requestId!, 
+            contractTemplateId: run.templateId 
+          });
+          patchStep(run.id, "generate", { status: "pass", result: "Version generated", durationMs: Date.now() - tg });
+        } catch (e: any) {
+          patchStep(run.id, "generate", { status: "warn", result: "Gen failed", durationMs: Date.now() - tg });
+        }
+      } else {
+        patchStep(run.id, "generate", { status: "idle", result: "No template" });
+      }
+
+      // Step 3: Fetch & Verify
       patchStep(run.id, "fetch", { status: "running" });
       const t1 = Date.now();
       const detail = await getContractDetail(clients.newCloud, tenant, requestId!);
