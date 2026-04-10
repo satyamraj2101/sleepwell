@@ -318,7 +318,15 @@ export async function generateContractVersion(
 ): Promise<ApiResponse<string>> {
   const res = await client.post<ApiResponse<string>>(
     `/api/${tenant}/contract-request-document/generate-version`,
-    payload
+    {
+      ...payload,
+      tenantName: tenant, // Some endpoints require it in the body
+    },
+    {
+      headers: {
+        tenantName: tenant, // Some endpoints require it as a header
+      },
+    }
   );
   return res.data;
 }
