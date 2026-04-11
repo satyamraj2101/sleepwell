@@ -66,6 +66,7 @@ interface TestRun {
   selectedTemplateId?: number;  // per-run override (only shown when multiple templates)
   selectedTemplateName?: string;
   requestId?: number;
+  recordId?: number;
   generatedVersionId?: number;  // versionId from version-history after run
   generatedFileName?: string;
   status: RunStatus;
@@ -595,10 +596,17 @@ function RunCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">Run #{run.index}</span>
             {run.requestId && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono bg-muted border border-border px-1.5 py-0.5 rounded">
-                REQ-{run.requestId}
-                <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Copied"); }} className="hover:text-foreground text-muted-foreground"><Copy size={9} /></button>
-                <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300"><ExternalLink size={9} /></a>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono bg-muted border border-border px-2 py-0.5 rounded shadow-sm">
+                <span className="text-blue-400 font-bold">REQ-{run.requestId}</span>
+                {run.recordId && (
+                  <span className="text-emerald-400/80 border-l border-border pl-1.5 ml-0.5" title="Leah Record ID">
+                    REC-{run.recordId}
+                  </span>
+                )}
+                <div className="flex items-center gap-1 ml-1 border-l border-border pl-1.5">
+                  <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Request ID Copied"); }} className="hover:text-foreground text-muted-foreground transition-colors" title="Copy Request ID"><Copy size={9} /></button>
+                  <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors" title="Open in Leah"><ExternalLink size={9} /></a>
+                </div>
               </span>
             )}
             {run.currentStage && (
@@ -613,8 +621,8 @@ function RunCard({
               </span>
             )}
             {run.actionTaken && isDone && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-teal-500/10 border border-teal-500/20 text-teal-400">
-                Action Taken
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-teal-500/10 border border-teal-500/20 text-teal-400 font-medium">
+                ACTION TAKEN
               </span>
             )}
             {isErr && <span className="text-[10px] text-red-400 font-medium ml-auto">Failed</span>}
@@ -1447,35 +1455,47 @@ export default function BulkTestCreatorPage() {
         }
       }
 
-      try {
-        const vhRes = await clients.newCloud.get(
-          `/api/${tenant}/collaboration/version-history`,
-          { params: { RequestId: requestId } }
-        );
-        const raw: any[] = Array.isArray(vhRes.data?.data) ? vhRes.data.data
-          : Array.isArray(vhRes.data) ? vhRes.data : [];
+      // Step 2b: Fetch & Polling for Version History
+      // Polling up to 3 times with increasing delay to ensure Leah finishes background generation
+      let allVersions: VersionRecord[] = [];
+      let pollCount = 0;
+      const maxPolls = 3;
 
-        // Normalize to VersionRecord[]
-        const allVersions: VersionRecord[] = raw.map((v: any) => ({
-          versionId: Number(v.versionId ?? v.collaborationDocumentId ?? 0),
-          collaborationDocumentId: Number(v.collaborationDocumentId ?? 0),
-          fileName: v.fileName ?? null,
-          versionNumber: v.versionNumber ?? null,
-          isGeneratedFromTemplate: !!v.isGeneratedFromTemplate,
-          isLocked: !!v.isLocked,
-          isPdf: v.fileName?.toLowerCase().endsWith('.pdf') ?? false,
-          isDocx: v.fileName?.toLowerCase().endsWith('.docx') ?? false,
-          addedByName: v.addedByName ?? v.fullName ?? null,
-          addedOn: v.addedOn ?? null,
-          collaborators: Array.isArray(v.collaborators) ? v.collaborators.map((c: any) => ({
-            id: c.id, userId: c.userId, fullName: c.fullName, email: c.email, status: c.status,
-          })) : [],
-        })).filter(v => v.versionId > 0);
+      while (pollCount < maxPolls) {
+        try {
+          const vhRes = await clients.newCloud.get(
+            `/api/${tenant}/collaboration/version-history`,
+            { params: { RequestId: requestId } }
+          );
+          const raw: any[] = Array.isArray(vhRes.data?.data) ? vhRes.data.data
+            : Array.isArray(vhRes.data) ? vhRes.data : [];
 
+          allVersions = raw.map((v: any) => ({
+            versionId: Number(v.versionId ?? v.collaborationDocumentId ?? 0),
+            collaborationDocumentId: Number(v.collaborationDocumentId ?? 0),
+            fileName: v.fileName ?? null,
+            versionNumber: v.versionNumber ?? null,
+            isGeneratedFromTemplate: !!v.isGeneratedFromTemplate,
+            isLocked: !!v.isLocked,
+            isPdf: v.fileName?.toLowerCase().endsWith('.pdf') ?? false,
+            isDocx: v.fileName?.toLowerCase().endsWith('.docx') ?? false,
+            addedByName: v.addedByName ?? v.fullName ?? null,
+            addedOn: v.addedOn ?? null,
+            collaborators: Array.isArray(v.collaborators) ? v.collaborators.map((c: any) => ({
+              id: c.id, userId: c.userId, fullName: c.fullName, email: c.email, status: c.status,
+            })) : [],
+          })).filter(v => v.versionId > 0);
+
+          if (allVersions.length > 0) break; // Found something, stop polling
+        } catch { /* ignore inner error during polling */ }
+
+        pollCount++;
+        if (pollCount < maxPolls) await new Promise(r => setTimeout(r, 2000 + pollCount * 1000));
+      }
+
+      if (allVersions.length > 0) {
         // Pick the best version for single-doc preview
         const primary = allVersions.find(v => v.isGeneratedFromTemplate) ?? allVersions[0];
-
-        if (allVersions.length > 0 && primary) {
           patchRun(run.id, {
             generatedVersionId: primary.versionId,
             generatedFileName: primary.fileName ?? `version-${primary.versionId}`,
@@ -1510,6 +1530,7 @@ export default function BulkTestCreatorPage() {
       patchStep(run.id, "fetch", { status: "pass", result: `Stage: ${stage}`, durationMs: Date.now() - t1 });
       patchRun(run.id, {
         currentStage: stage,
+        recordId: (detail as any)?.recordId ?? (detail as any)?.recordID ?? undefined,
         actionTaken,
         contractAssignees: (detail.assignees ?? []) as AssigneeRef[],
         contractClients: (detail.clients ?? []) as ClientRef[],
