@@ -1496,26 +1496,23 @@ export default function BulkTestCreatorPage() {
       if (allVersions.length > 0) {
         // Pick the best version for single-doc preview
         const primary = allVersions.find(v => v.isGeneratedFromTemplate) ?? allVersions[0];
-          patchRun(run.id, {
-            generatedVersionId: primary.versionId,
-            generatedFileName: primary.fileName ?? `version-${primary.versionId}`,
-            versions: allVersions,
-          });
-          patchStep(run.id, "version", {
-            status: "pass",
-            result: `${allVersions.length} version${allVersions.length !== 1 ? "s" : ""} · ${primary.fileName ?? `v${primary.versionId}`}`,
-            durationMs: Date.now() - tg,
-          });
-        } else {
-          patchRun(run.id, { versions: [] });
-          patchStep(run.id, "version", {
-            status: effectiveTemplateId ? "warn" : "idle",
-            result: effectiveTemplateId ? "No version generated" : "No template selected",
-            durationMs: Date.now() - tg,
-          });
-        }
-      } catch {
-        patchStep(run.id, "version", { status: "warn", result: "Version history unavailable", durationMs: Date.now() - tg });
+        patchRun(run.id, {
+          generatedVersionId: primary.versionId,
+          generatedFileName: primary.fileName ?? `version-${primary.versionId}`,
+          versions: allVersions,
+        });
+        patchStep(run.id, "version", {
+          status: "pass",
+          result: `${allVersions.length} version${allVersions.length !== 1 ? "s" : ""} · ${primary.fileName ?? `v${primary.versionId}`}`,
+          durationMs: Date.now() - tg,
+        });
+      } else {
+        patchRun(run.id, { versions: [] });
+        patchStep(run.id, "version", {
+          status: effectiveTemplateId ? "warn" : "idle",
+          result: effectiveTemplateId ? "No version generated (backend delay?)" : "No template selected",
+          durationMs: Date.now() - tg,
+        });
       }
 
       // Step 3: Fetch & Verify + action-taken
