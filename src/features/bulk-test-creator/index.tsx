@@ -15,7 +15,7 @@ import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
 import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, getQuestionnaire, submitQuestionnaire } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
-import { getPreExecutionApprovals } from "@/api/approval";
+import { getPreExecutionApprovals, getSnapshotApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
@@ -876,21 +876,23 @@ function RunCard({
                   {run.approvals!.map((a, i) => (
                     <div key={i} className={cn(
                       "px-2 py-1 rounded border text-[10px]",
-                      a.status === "Approved" ? "bg-emerald-500/8 border-emerald-500/20" :
-                      a.status === "Rejected" ? "bg-red-500/8 border-red-500/20" :
+                      a.isApproved ? "bg-emerald-500/8 border-emerald-500/20" :
+                      (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/8 border-red-500/20" :
                       "bg-amber-500/8 border-amber-500/20"
                     )} title={a.condition || undefined}>
                       <div className="flex items-center justify-between gap-1">
-                        <span className={cn("truncate",
-                          a.status === "Approved" ? "text-emerald-400" :
-                          a.status === "Rejected" ? "text-red-400" : "text-amber-400"
+                        <span className={cn("truncate font-medium",
+                          a.isApproved ? "text-emerald-400" :
+                          (a.status as string).toLowerCase() === "rejected" ? "text-red-400" : "text-amber-400"
                         )}>{a.approverName}</span>
-                        <span className={cn("text-[8px] font-bold flex-shrink-0",
-                          a.status === "Approved" ? "text-emerald-400" :
-                          a.status === "Rejected" ? "text-red-400" : "text-amber-400/70"
-                        )}>{a.status.toUpperCase()}</span>
+                        <span className={cn("text-[8px] font-bold flex-shrink-0 px-1 rounded-sm",
+                          a.isApproved ? "bg-emerald-500/10 text-emerald-400" :
+                          (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400/70"
+                        )}>{(a.statusName || a.status).toUpperCase()}</span>
                       </div>
-                      {a.approverRole && <div className="text-[9px] opacity-50 truncate">{a.approverRole}</div>}
+                      {a.approverRole && a.approverRole !== a.statusName && (
+                        <div className="text-[9px] opacity-50 truncate mt-0.5">{a.approverRole}</div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1689,28 +1691,36 @@ export default function BulkTestCreatorPage() {
       patchStep(run.id, "approvals", { status: "running" });
       const t2 = Date.now();
       try {
-        const appRes: any = await getPreExecutionApprovals(clients.newCloud, tenant, requestId!);
-        // Handle Leah double-wrap and varying casing
-        const inner = appRes?.data?.data ?? appRes?.data ?? appRes;
-        const rawList = inner?.approvals ?? appRes?.approvals ?? [];
+        const rawList = await getSnapshotApprovals(clients.oldProd, tenant, requestId!, username);
         const list: PreExecutionApproval[] = (Array.isArray(rawList) ? rawList : []).map((a: any) => ({
+          approvalGuid:   a.approvalGuid || "",
           approvalId:     Number(a.approvalId ?? 0),
-          approverName:   String(a.approvername ?? a.approverName ?? a.fullName ?? "Unknown Approver"),
-          approverUserId: Number(a.approverUserId ?? a.userId ?? 0),
-          approverRole:   String(a.approverrole ?? a.approverRole ?? ""),
-          status:         (a.status ?? "Pending") as any,
-          condition:      String(a.condition ?? ""),
-          actionedOn:     a.actionedOn ?? null,
-          comments:       a.comments ?? null,
+          approverName:   String(a.fullname || a.approverName || a.approvername || "Unknown Approver"),
+          fullname:       a.fullname || "",
+          username:       a.username || "",
+          approverUserId: Number(a.assignedToId || a.approverUserId || 0),
+          approverRole:   String(a.statusName || a.approverRole || ""),
+          condition:      String(a.autoApprovalParentProcessCondition || ""),
+          status:         a.isApproved ? "Approved" : (a.statusName === "Negotiation" ? "Pending" : "Pending"),
+          statusName:     a.statusName || "Pending",
+          isApproved:     !!a.isApproved,
+          isAutoApproval: !!a.isAutoApproval,
+          actionedOn:     a.approvalDate || null,
+          comments:       a.comments || "",
         }));
-        const count = list.length;
+
         patchRun(run.id, { approvals: list });
+        const hasRejected = list.some(a => (a.status as string).toLowerCase() === "rejected");
+        const allApproved = list.length > 0 && list.every(a => a.isApproved);
+
         patchStep(run.id, "approvals", {
-          status: count > 0 ? "warn" : "pass",
-          result: count > 0 ? `${count} approval trigger${count !== 1 ? "s" : ""}` : "No approvals required",
+          status: hasRejected ? "fail" : (allApproved ? "pass" : "pass"),
+          result: list.length > 0 
+            ? `${list.length} approver${list.length !== 1 ? "s" : ""} · ${list[0].statusName || (allApproved ? "Approved" : "Pending")}`
+            : "No active approvals",
           durationMs: Date.now() - t2,
         });
-      } catch {
+      } catch (e) {
         patchStep(run.id, "approvals", { status: "warn", result: "Approval graph unavailable", durationMs: Date.now() - t2 });
       }
 

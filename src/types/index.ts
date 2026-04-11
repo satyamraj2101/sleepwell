@@ -391,11 +391,17 @@ export interface AuditLogRequest {
 // ─── Pre-Execution Approval ───────────────────────────────────────────────────
 export interface PreExecutionApproval {
   approvalId: number;
+  approvalGuid?: string;
   approverName: string;
+  fullname?: string;
+  username?: string;
   approverUserId: number;
   approverRole: string;
   condition: string;
   status: "Pending" | "Approved" | "Rejected";
+  statusName?: string;
+  isApproved?: boolean;
+  isAutoApproval?: boolean;
   actionedOn: string | null;
   comments: string | null;
 }
