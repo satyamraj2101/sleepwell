@@ -26,6 +26,7 @@ import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval
 interface VersionRecord {
   versionId: number;
   collaborationDocumentId?: number;
+  url?: string;
   fileName?: string;
   versionNumber?: number;
   isGeneratedFromTemplate?: boolean;
@@ -86,6 +87,7 @@ interface TestRun {
   requesterName?: string;
   versions?: VersionRecord[];
   actionTaken?: boolean;
+  availableActions?: Array<{ code: string; workflowCommandName?: string; displayText?: string }>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -367,9 +369,11 @@ function FilePreviewDialog({
     setLoading(true);
     setError(null);
 
-    // Fetch as blob using fetch() directly (axios responseType blob also works)
-    const fmt = isPdf ? "pdf" : "docx";
-    fetch(`https://${newCloudApi}/api/${tenant}/version/${versionId}/download?format=${fmt}`, {
+    // Force PDF (1) for browser preview compatibility
+    const fmtCode = 1;
+    const downloadUrl = `https://${newCloudApi}/api/${tenant}/version/${versionId}/download?format=${fmtCode}&FromPreviewPage=false&IncludeComments=false`;
+    
+    fetch(downloadUrl, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => {
@@ -439,15 +443,15 @@ function FilePreviewDialog({
               <p className="text-[11px] text-white/30">Use the Download button above to save the file.</p>
             </div>
           )}
-          {blobUrl && isPdf && (
+          {blobUrl && (
             <iframe src={blobUrl} className="w-full h-full border-0" title="Document preview" />
           )}
-          {blobUrl && !isPdf && !loading && (
+          {!blobUrl && !loading && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
               <FileText size={48} className="text-white/10" />
-              <p className="text-[13px] text-white/50">DOCX preview is not available in browser.</p>
+              <p className="text-[13px] text-white/50">Preview is not available for this file type.</p>
               <Button size="sm" className="gap-1.5 bg-amber-500 hover:bg-amber-400 text-black" onClick={handleDownload}>
-                <Download size={13} /> Download DOCX to view
+                <Download size={13} /> Download to view
               </Button>
             </div>
           )}
@@ -534,7 +538,7 @@ function RunCard({
   isRunningAll: boolean;
   newCloudApi: string;
 }) {
-  const { tenant } = useAuthStore();
+  const { tenant, token } = useAuthStore();
   const isRun = run.status === "running";
   const isErr = run.status === "error";
   const isDone = run.status === "done";
@@ -656,13 +660,44 @@ function RunCard({
             <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit"}
           </Button>
           {run.requestId && isDone && (
-            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10" onClick={onViewContract}>
+            <Button 
+              size="sm" variant="outline" 
+              className="h-7 gap-1 text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10" 
+              onClick={onViewContract}
+            >
               <Eye size={11} /> View
             </Button>
           )}
-          {run.generatedVersionId && isDone && (
-            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={onPreviewDoc}>
+          {isDone && (
+            <Button 
+              size="sm" variant="outline" 
+              className="h-7 gap-1 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-30" 
+              onClick={onPreviewDoc} 
+              disabled={!run.generatedVersionId}
+              title={!run.generatedVersionId ? "Waiting for version history..." : "Preview document as PDF"}
+            >
               <FileText size={11} /> Preview
+            </Button>
+          )}
+          {run.generatedVersionId && isDone && (
+            <Button 
+              size="sm" variant="outline" 
+              className="h-7 px-2 flex items-center gap-1 text-[11px] font-medium rounded-md border border-blue-500/30 bg-background text-blue-400 hover:bg-blue-500/10 transition-colors"
+              title="Download original DOCX"
+              onClick={() => {
+                const url = `https://${newCloudApi}/api/${tenant}/version/${run.generatedVersionId}/download?format=0&FromPreviewPage=false&IncludeComments=false`;
+                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+                  .then(r => r.blob())
+                  .then(blob => {
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = run.generatedFileName || `version-${run.generatedVersionId}.docx`;
+                    link.click();
+                  })
+                  .catch(err => toast.error("Download failed: " + err.message));
+              }}
+            >
+              <Download size={11} /> Word
             </Button>
           )}
           {!isRunningAll && (
@@ -681,6 +716,32 @@ function RunCard({
           </button>
         </div>
       </div>
+
+      {/* Available Actions Section */}
+      {run.availableActions && run.availableActions.length > 0 && (
+        <div className="px-4 pb-3 pt-1 border-t border-border/40">
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Shield size={11} className="text-blue-400" /> Available Actions
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {run.availableActions.map((action, i) => (
+              <span 
+                key={i} 
+                className={cn(
+                  "px-2 py-0.5 rounded text-[10px] border transition-all",
+                  action.code === "Legal Review" || action.code.includes("Review")
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    : action.code.includes("Version")
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-muted/50 text-muted-foreground border-border"
+                )}
+              >
+                {action.displayText || action.workflowCommandName || action.code}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Step pills ── */}
       <div className="px-4 pb-3 flex gap-1.5 flex-wrap border-t border-border/30 pt-3">
@@ -758,17 +819,17 @@ function RunCard({
                         <Eye size={9} />
                       </button>
                       <a
-                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=pdf`}
+                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=1&FromPreviewPage=false&IncludeComments=false&Token=${token}`}
                         target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all"
+                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-400 border border-border hover:border-emerald-500/30 transition-all"
                         title="Download PDF"
                       >
                         <Download size={9} /> PDF
                       </a>
                       <a
-                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=docx`}
+                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=0&FromPreviewPage=false&IncludeComments=false&Token=${token}`}
                         target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 border border-border hover:border-amber-500/30 transition-all"
+                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all"
                         title="Download DOCX"
                       >
                         <Download size={9} /> DOCX
@@ -1403,8 +1464,22 @@ export default function BulkTestCreatorPage() {
         requestId = typeof res === "number" ? res : (res as any)?.id ?? (res as any)?.requestId ?? (res as any)?.data;
         if (!requestId || isNaN(Number(requestId))) throw new Error(`No request ID in response: ${JSON.stringify(res)}`);
         requestId = Number(requestId);
-        patchStep(run.id, "create", { status: "pass", result: `Created REQ-${requestId}`, durationMs: Date.now() - t0 });
-        patchRun(run.id, { requestId });
+        
+        // Fetch official Record ID (REC-XXXXX) immediately after create/update
+        let initialRecordId: string | undefined;
+        try {
+          const initDetail = await getContractDetail(clients.newCloud, tenant, requestId);
+          initialRecordId = (initDetail as any)?.recordId ?? (initDetail as any)?.recordID;
+        } catch (e) {
+          console.error("Initial detail fetch failed", e);
+        }
+
+        patchStep(run.id, "create", { 
+          status: "pass", 
+          result: `Created REQ-${requestId}${initialRecordId ? ` (${initialRecordId})` : ""}`, 
+          durationMs: Date.now() - t0 
+        });
+        patchRun(run.id, { requestId, recordId: initialRecordId });
       }
 
       // Step 2: Version Generation + History
@@ -1421,7 +1496,6 @@ export default function BulkTestCreatorPage() {
             contractTemplateId: effectiveTemplateId,
             applicationTypeId: selAppTypeId!,
             requestorUsername: username,
-            requestId: Number(requestId),
           });
 
           // Map our run-specific field values into the questionnaire schema
@@ -1447,7 +1521,7 @@ export default function BulkTestCreatorPage() {
             requestorUsername: username,
           });
 
-          await new Promise(r => setTimeout(r, 2500)); // wait for async generation
+          await new Promise(r => setTimeout(r, 1500)); // Optimized wait
         } catch (err) {
           console.error("Document generation (Questionnaire) failed", err);
           // Non-blocking for history check
@@ -1456,41 +1530,67 @@ export default function BulkTestCreatorPage() {
       }
 
       // Step 2b: Fetch & Polling for Version History
-      // Polling up to 3 times with increasing delay to ensure Leah finishes background generation
+      // Polling up to 5 times with 2s delay to balance speed and reliability
       let allVersions: VersionRecord[] = [];
       let pollCount = 0;
-      const maxPolls = 10; // Poll for up to 40 seconds
+      const maxPolls = 10; // Increased to give more time for generation
 
       while (pollCount < maxPolls) {
         try {
-          const vhRes = await clients.newCloud.get(
-            `/api/${tenant}/collaboration/version-history`,
-            { params: { RequestId: requestId } }
+          console.log("[DEBUG] Fetching versions from Snapshot API for REQ-" + requestId);
+          const vhRes = await clients.oldProd.get(
+            `/api/${tenant}/v1/snapshot/versions`,
+            { params: { requestId, requestorUsername: username } }
           );
-          const raw: any[] = Array.isArray(vhRes.data?.data) ? vhRes.data.data
-            : Array.isArray(vhRes.data) ? vhRes.data : [];
+          
+          console.log("[DEBUG] Snapshot Versions raw data:", JSON.stringify(vhRes.data, null, 2));
+          
+          const raw: any[] = Array.isArray(vhRes.data) ? vhRes.data : (Array.isArray(vhRes.data?.data) ? vhRes.data.data : []);
 
-          allVersions = raw.map((v: any) => ({
-            versionId: Number(v.versionId ?? v.collaborationDocumentId ?? 0),
-            collaborationDocumentId: Number(v.collaborationDocumentId ?? 0),
-            fileName: v.fileName ?? null,
-            versionNumber: v.versionNumber ?? null,
-            isGeneratedFromTemplate: !!v.isGeneratedFromTemplate,
-            isLocked: !!v.isLocked,
-            isPdf: v.fileName?.toLowerCase().endsWith('.pdf') ?? false,
-            isDocx: v.fileName?.toLowerCase().endsWith('.docx') ?? false,
-            addedByName: v.addedByName ?? v.fullName ?? null,
-            addedOn: v.addedOn ?? null,
-            collaborators: Array.isArray(v.collaborators) ? v.collaborators.map((c: any) => ({
-              id: c.id, userId: c.userId, fullName: c.fullName, email: c.email, status: c.status,
-            })) : [],
-          })).filter(v => v.versionId > 0);
+          allVersions = raw.map((v: any, index: number) => {
+            const vid = Number(v.versionId ?? v.id ?? 0);
+            const finalVid = vid > 0 ? vid : (index === 0 ? Number(requestId) : (index + 1));
+            const fname = v.fileName ?? v.name ?? null;
 
-          if (allVersions.length > 0) break; // Found something, stop polling
-        } catch { /* ignore inner error during polling */ }
+            return {
+              versionId: finalVid,
+              collaborationDocumentId: vid,
+              url: v.url ?? null,
+              fileName: fname || `Version ${v.versionNumber || (index + 1)}`,
+              versionNumber: v.versionNumber ?? null,
+              isGeneratedFromTemplate: true,
+              isLocked: !!v.isLocked,
+              isPdf: fname?.toLowerCase().endsWith('.pdf') ?? false,
+              isDocx: fname?.toLowerCase().endsWith('.docx') ?? true,
+              addedByName: v.lastModifiedBy ?? v.addedByName ?? null,
+              addedOn: v.lastModifiedOn ?? v.addedOn ?? null,
+              collaborators: [],
+            };
+          });
+
+          if (allVersions.length > 0) {
+            updateRun({ id: run.id, versions: allVersions });
+            break;
+          }
+        } catch (e) {
+          console.warn("Snapshot version polling error", e);
+        }
 
         pollCount++;
-        if (pollCount < maxPolls) await new Promise(r => setTimeout(r, 4000));
+        if (pollCount < maxPolls) await new Promise(r => setTimeout(r, 1200)); // Optimized polling interval
+      }
+
+      // Step 3: Fetch Available Actions
+      if (requestId) {
+        try {
+          const actsRes = await clients.oldProd.get(`/api/${tenant}/v1/snapshot/${requestId}/available-actions`, {
+            params: { requestorUsername: username, skipCollaborationActions: true }
+          });
+          const acts = Array.isArray(actsRes.data) ? actsRes.data : [];
+          patchRun(run.id, { availableActions: acts });
+        } catch (e) {
+          console.warn("Failed to fetch available actions", e);
+        }
       }
 
       if (allVersions.length > 0) {
