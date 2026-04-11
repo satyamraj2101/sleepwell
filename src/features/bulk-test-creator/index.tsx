@@ -584,126 +584,100 @@ function RunCard({
     )}>
 
       {/* ── Header ── */}
-      <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
-        <div className={cn(
-          "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold",
-          isDone ? "bg-emerald-500/10 text-emerald-500" :
-          isErr ? "bg-red-500/10 text-red-500" :
-          isRun ? "bg-blue-500/10 text-blue-500" :
-          "bg-muted text-muted-foreground"
-        )}>
-          {isDone ? <CheckCircle2 size={16} /> : isErr ? <AlertCircle size={16} /> :
-           isRun ? <Loader2 size={14} className="animate-spin" /> : run.index}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold">Run #{run.index}</span>
-            {run.requestId && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono bg-muted border border-border px-2 py-0.5 rounded shadow-sm">
-                <span className="text-blue-400 font-bold">REQ-{run.requestId}</span>
-                {run.recordId && (
-                  <span className="text-emerald-400/80 border-l border-border pl-1.5 ml-0.5" title="Leah Record ID">
-                    REC-{run.recordId}
-                  </span>
-                )}
-                <div className="flex items-center gap-1 ml-1 border-l border-border pl-1.5">
-                  <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Request ID Copied"); }} className="hover:text-foreground text-muted-foreground transition-colors" title="Copy Request ID"><Copy size={9} /></button>
-                  <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors" title="Open in Leah"><ExternalLink size={9} /></a>
-                </div>
-              </span>
-            )}
-            {run.currentStage && (
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border",
-                run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
-                run.currentStage.toLowerCase().includes("negotiat") ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
-                run.currentStage.toLowerCase().includes("approv") ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-                "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-              )}>
-                <GitBranch size={8} className="inline mr-0.5" />{run.currentStage}
-              </span>
-            )}
-            {run.actionTaken && isDone && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-teal-500/10 border border-teal-500/20 text-teal-400 font-medium">
-                ACTION TAKEN
-              </span>
-            )}
-            {isErr && <span className="text-[10px] text-red-400 font-medium ml-auto">Failed</span>}
-            {isDone && <span className="text-[10px] text-emerald-400 font-medium ml-auto">✓ Pass</span>}
+      <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className={cn(
+            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold",
+            isDone ? "bg-emerald-500/10 text-emerald-500" :
+            isErr ? "bg-red-500/10 text-red-500" :
+            isRun ? "bg-blue-500/10 text-blue-500" :
+            "bg-muted text-muted-foreground"
+          )}>
+            {isDone ? <CheckCircle2 size={16} /> : isErr ? <AlertCircle size={16} /> :
+             isRun ? <Loader2 size={14} className="animate-spin" /> : run.index}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
-            <span>{run.appTypeName}</span>
-            {(run.templateName || run.selectedTemplateName) && (
-              <span className="text-amber-400/70">· {run.selectedTemplateName || run.templateName}</span>
-            )}
-            {fieldCount > 0 && <span>· {filledCount}/{fieldCount} fields</span>}
-            {run.startedAt && run.finishedAt && <span>· {((run.finishedAt - run.startedAt) / 1000).toFixed(1)}s</span>}
-            {(run.versions?.length ?? 0) > 0 && (
-              <span className="text-emerald-400">· {run.versions!.length} version{run.versions!.length !== 1 ? "s" : ""}</span>
-            )}
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold whitespace-nowrap">Run #{run.index}</span>
+              {run.requestId && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-mono bg-muted border border-border px-2 py-0.5 rounded shadow-sm">
+                  <span className="text-blue-400 font-bold">REQ-{run.requestId}</span>
+                  {run.recordId && (
+                    <span className="text-emerald-400/80 border-l border-border pl-1.5 ml-0.5" title="Leah Record ID">
+                      REC-{run.recordId}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 ml-1 border-l border-border pl-1.5">
+                    <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Request ID Copied"); }} className="hover:text-foreground text-muted-foreground transition-colors" title="Copy Request ID"><Copy size={9} /></button>
+                    <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors" title="Open in Leah"><ExternalLink size={9} /></a>
+                  </div>
+                </span>
+              )}
+              {run.currentStage && (
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border",
+                  run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                  run.currentStage.toLowerCase().includes("negotiat") ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                  run.currentStage.toLowerCase().includes("approv") ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                  "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                )}>
+                  <GitBranch size={8} className="inline mr-0.5" />{run.currentStage}
+                </span>
+              )}
+            </div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
+              <span>{run.appTypeName}</span>
+              {(run.templateName || run.selectedTemplateName) && (
+                <span className="text-amber-400/70 truncate max-w-[120px]">· {run.selectedTemplateName || run.templateName}</span>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {hasDetails && (
-            <button
-              onClick={() => setDetailsOpen(o => !o)}
-              className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-              title={detailsOpen ? "Collapse details" : "Expand details"}
-            >
-              {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-          )}
-          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={onToggleEdit}>
-            <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit"}
-          </Button>
-          {run.requestId && isDone && (
-            <Button 
-              size="sm" variant="outline" 
-              className="h-7 gap-1 text-xs text-blue-400 border-blue-500/30 hover:bg-blue-500/10" 
-              onClick={onViewContract}
-            >
-              <Eye size={11} /> View
+        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
+          <div className="flex items-center gap-1.5 h-7">
+            {hasDetails && (
+              <button
+                onClick={() => setDetailsOpen(o => !o)}
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                title={detailsOpen ? "Collapse details" : "Expand details"}
+              >
+                {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            )}
+            <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px] px-2" onClick={onToggleEdit}>
+              <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit"}
             </Button>
-          )}
-          {isDone && (
-            <Button 
-              size="sm" variant="outline" 
-              className="h-7 gap-1 text-xs text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-30" 
-              onClick={onPreviewDoc} 
-              disabled={!run.generatedVersionId}
-              title={!run.generatedVersionId ? "Waiting for version history..." : "Preview document as PDF"}
-            >
-              <FileText size={11} /> Preview
-            </Button>
-          )}
-          {run.generatedVersionId && isDone && (
-            <Button 
-              size="sm" variant="outline" 
-              className="h-7 px-2 flex items-center gap-1 text-[11px] font-medium rounded-md border border-blue-500/30 bg-background text-blue-400 hover:bg-blue-500/10 transition-colors"
-              title="Download original DOCX"
-              onClick={() => {
-                const url = `https://${newCloudApi}/api/${tenant}/version/${run.generatedVersionId}/download?format=0&FromPreviewPage=false&IncludeComments=false`;
-                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                  .then(r => r.blob())
-                  .then(blob => {
-                    const link = document.createElement("a");
-                    link.href = URL.createObjectURL(blob);
-                    link.download = run.generatedFileName || `version-${run.generatedVersionId}.docx`;
-                    link.click();
-                  })
-                  .catch(err => toast.error("Download failed: " + err.message));
-              }}
-            >
-              <Download size={11} /> Word
-            </Button>
-          )}
+          </div>
+
+          <div className="flex items-center gap-1.5 h-7">
+            {run.requestId && isDone && (
+              <Button 
+                size="sm" variant="outline" 
+                className="h-7 gap-1 text-[11px] px-2 text-blue-400 border-blue-500/30 hover:bg-blue-500/10" 
+                onClick={onViewContract}
+              >
+                <Eye size={11} /> View
+              </Button>
+            )}
+            {isDone && (
+              <Button 
+                size="sm" variant="outline" 
+                className="h-7 gap-1 text-[11px] px-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-30" 
+                onClick={onPreviewDoc} 
+                disabled={!run.generatedVersionId}
+              >
+                <FileText size={11} /> Preview
+              </Button>
+            )}
+          </div>
+
           {!isRunningAll && (
             <Button
               size="sm"
-              className={cn("h-7 gap-1 text-xs", isDone || isErr ? "bg-muted hover:bg-muted/80 text-foreground border border-border" : "")}
+              className={cn("h-7 gap-1 text-[11px] px-3", isDone || isErr ? "bg-muted hover:bg-muted/80 text-foreground border border-border" : "bg-amber-500 hover:bg-amber-600 text-black font-semibold shadow-sm")}
               variant={isDone || isErr ? "outline" : "default"}
               onClick={onRun} disabled={isRun}
             >
@@ -711,7 +685,7 @@ function RunCard({
               {run.requestId ? "Rerun" : "Run"}
             </Button>
           )}
-          <button onClick={onDelete} className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <button onClick={onDelete} className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0">
             <Trash2 size={13} />
           </button>
         </div>
@@ -842,84 +816,81 @@ function RunCard({
           )}
 
           {/* People: Assignees + Approvals + Signatories */}
-          <div className="px-4 py-3 border-b border-border/20 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="px-4 py-3 border-b border-border/20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
 
             {/* Assignees */}
-            <div>
-              <div className="flex items-center gap-1 mb-1.5">
-                <Users size={10} className="text-indigo-400" />
-                <span className="text-[9px] font-semibold text-indigo-400 uppercase tracking-wider">Assignees</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Users size={11} className="text-indigo-400" />
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Assignees</span>
               </div>
               {(run.contractAssignees?.length ?? 0) > 0 ? (
                 <div className="space-y-1">
                   {run.contractAssignees!.map((a, i) => (
                     <div key={i} className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded border text-[10px]",
-                      a.isPrimary ? "bg-indigo-500/8 border-indigo-500/20 text-indigo-300" : "bg-muted/20 border-border/50 text-muted-foreground"
+                      "flex items-center justify-between gap-2 px-3 py-1.5 rounded border text-[11px]",
+                      a.isPrimary ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300" : "bg-muted/30 border-border/50 text-muted-foreground"
                     )}>
-                      <span className="flex-1 truncate">{a.userName || `User #${a.userId}`}</span>
-                      {a.isPrimary && <span className="text-[7px] text-indigo-400/70 font-bold">PRIMARY</span>}
+                      <span className="truncate flex-1">{a.userName || `User #${a.userId}`}</span>
+                      {a.isPrimary && <span className="text-[8px] text-indigo-400 font-bold bg-indigo-500/10 px-1 rounded shadow-sm">PRIMARY</span>}
                     </div>
                   ))}
                 </div>
-              ) : <span className="text-[10px] text-muted-foreground/40">None</span>}
+              ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
             </div>
 
             {/* Approvals */}
-            <div>
-              <div className="flex items-center gap-1 mb-1.5">
-                <Shield size={10} className="text-amber-400" />
-                <span className="text-[9px] font-semibold text-amber-400 uppercase tracking-wider">Approvals</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Shield size={11} className="text-amber-400" />
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Approvals</span>
               </div>
               {(run.approvals?.length ?? 0) > 0 ? (
                 <div className="space-y-1">
                   {run.approvals!.map((a, i) => (
                     <div key={i} className={cn(
-                      "px-2 py-1 rounded border text-[10px]",
-                      a.isApproved ? "bg-emerald-500/8 border-emerald-500/20" :
-                      (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/8 border-red-500/20" :
-                      "bg-amber-500/8 border-amber-500/20"
+                      "px-3 py-1.5 rounded border text-[11px]",
+                      a.isApproved ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300" :
+                      (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/10 border-red-500/30 text-red-300" :
+                      "bg-amber-500/10 border-amber-500/30 text-amber-300"
                     )} title={a.condition || undefined}>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className={cn("truncate font-medium",
-                          a.isApproved ? "text-emerald-400" :
-                          (a.status as string).toLowerCase() === "rejected" ? "text-red-400" : "text-amber-400"
-                        )}>{a.approverName}</span>
-                        <span className={cn("text-[8px] font-bold flex-shrink-0 px-1 rounded-sm",
-                          a.isApproved ? "bg-emerald-500/10 text-emerald-400" :
-                          (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/10 text-red-400" : "bg-amber-500/10 text-amber-400/70"
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate font-medium flex-1">{a.approverName}</span>
+                        <span className={cn("text-[9px] font-bold px-1.5 rounded-sm shadow-sm",
+                          a.isApproved ? "bg-emerald-500/20 text-emerald-400" :
+                          (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"
                         )}>{(a.statusName || a.status).toUpperCase()}</span>
                       </div>
                       {a.approverRole && a.approverRole !== a.statusName && (
-                        <div className="text-[9px] opacity-50 truncate mt-0.5">{a.approverRole}</div>
+                        <div className="text-[10px] opacity-40 truncate mt-0.5">{a.approverRole}</div>
                       )}
                     </div>
                   ))}
                 </div>
-              ) : <span className="text-[10px] text-emerald-400/60">No approvals required</span>}
+              ) : <div className="text-[11px] text-emerald-400/60 italic px-1">No approvals required</div>}
             </div>
 
             {/* Signatories (collaborators) */}
-            <div>
-              <div className="flex items-center gap-1 mb-1.5">
-                <Users size={10} className="text-purple-400" />
-                <span className="text-[9px] font-semibold text-purple-400 uppercase tracking-wider">Signatories</span>
+            <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-1.5">
+                <Users size={11} className="text-purple-400" />
+                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Signatories</span>
               </div>
               {allSignatories.length > 0 ? (
-                <div className="space-y-1">
+                <div className="flex flex-wrap gap-1.5">
                   {allSignatories.map((s, i) => (
-                    <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded border border-purple-500/20 bg-purple-500/8 text-[10px] text-purple-300">
-                      <span className="flex-1 truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
-                      {s.email && <span className="text-[8px] opacity-40 truncate">{s.email}</span>}
+                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
+                      <span className="truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
+                      {s.email && <span className="text-[9px] opacity-40 hidden sm:inline">{s.email}</span>}
                     </div>
                   ))}
                 </div>
-              ) : <span className="text-[10px] text-muted-foreground/40">None assigned</span>}
+              ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
             </div>
           </div>
 
           {/* Context: Clients, Parties, Requester */}
-          <div className="px-4 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+          <div className="px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border/10">
             {run.requesterName && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">By</span>
@@ -1808,10 +1779,10 @@ export default function BulkTestCreatorPage() {
         }
       />
 
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
 
         {/* ── LEFT SIDEBAR ── */}
-        <div className="w-[320px] flex-shrink-0 space-y-3 sticky top-4">
+        <div className="w-full lg:w-[320px] lg:flex-shrink-0 space-y-3 lg:sticky lg:top-4">
 
           {/* Setup card */}
           <div className="border border-border rounded-xl bg-card overflow-hidden">

@@ -336,7 +336,7 @@ export default function MetadataManagerPage() {
         <>
           {/* Stats bar */}
           {!isLoading && allFields.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
               <StatTile label="Total" value={stats.total} />
               <StatTile label="Active" value={stats.active} accent="green" onClick={() => setActiveFilter(activeFilter === "active" ? "all" : "active")} active={activeFilter === "active"} />
               <StatTile label="Inactive" value={stats.inactive} accent={stats.inactive > 0 ? "amber" : "default"} onClick={() => setActiveFilter(activeFilter === "inactive" ? "all" : "inactive")} active={activeFilter === "inactive"} />
@@ -439,7 +439,7 @@ export default function MetadataManagerPage() {
 
       {/* Side panel — fixed overlay so it doesn't affect layout */}
       {panel !== "none" && (
-        <div className="fixed inset-y-0 right-0 z-40 w-[440px] border-l border-border bg-background/95 backdrop-blur-sm flex flex-col shadow-2xl">
+        <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[440px] border-l border-border bg-background/95 backdrop-blur-sm flex flex-col shadow-2xl">
           <FieldFormPanel
             mode={panel}
             field={editingField}
@@ -584,22 +584,22 @@ function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption,
           {/* Two-column layout: flags + meta on left, options on right */}
           <div className="flex gap-4">
             {/* Left: flags + meta */}
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex flex-wrap gap-1">
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex flex-wrap gap-1.5">
                 <VisFlag active={f.isVisible !== false} label="Visible" />
                 <VisFlag active={f.isVisibleOnRequestDetails !== false} label="Req Details" />
                 <VisFlag active={f.displayInRequestJourney === true} label="Journey" />
                 <VisFlag active={f.displayInRequestDetails === true} label="In Details" />
                 {f.isForAllApplicationTypes && <VisFlag active={true} label="All Types" />}
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[9px] font-mono text-muted-foreground/50">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono text-muted-foreground/50 border-t border-border/10 pt-1">
                 {f.fieldTypeId && <span>TypeID: {f.fieldTypeId}</span>}
                 {f.metadataType && <span>MetaType: {f.metadataType}</span>}
                 {f.applicationTypeName && <span>AppType: {f.applicationTypeName}</span>}
                 {f.fieldGroup && <span>Group: {f.fieldGroup}</span>}
               </div>
               {f.helpText && (
-                <p className="text-[10px] text-muted-foreground/70 bg-muted/40 rounded px-2 py-1 border border-border/30">
+                <p className="text-[10px] text-muted-foreground/70 bg-muted/20 rounded px-2.5 py-1.5 border border-border/20">
                   {f.helpText}
                 </p>
               )}

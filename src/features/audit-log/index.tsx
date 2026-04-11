@@ -69,7 +69,7 @@ export default function AuditLogPage() {
       />
 
       {/* Filter form */}
-      <div className="bg-card border border-border rounded-lg p-4 mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="bg-card border border-border rounded-lg p-4 mb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Request ID</label>
           <Input placeholder="e.g. 92355" value={requestId} onChange={(e) => setRequestId(e.target.value)} className="h-8 text-sm" />

@@ -61,7 +61,7 @@ export default function CompareComplyPage() {
       {scoreCard && (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <StatCard label="Overall score" value={`${scoreCard.overallScore ?? 0}%`} />
             <StatCard label="Total obligations" value={scoreCard.totalObligations ?? 0} />
             <StatCard label="Compliant" value={scoreCard.compliantCount ?? 0} className="border border-green-500/30" />

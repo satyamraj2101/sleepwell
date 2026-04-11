@@ -107,12 +107,12 @@ export default function ContractEditPage() {
                <Layers size={14} className="text-blue-500" />
                <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.25em]">Global View</h3>
              </div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <AppTypeCard 
-                  at={{ applicationTypeId: -1, applicationTypeName: "All Frameworks", applicationName: "Global Contract Asset View" } as ApplicationType} 
-                  onClick={() => { setSelAppType({ applicationTypeId: -1, applicationTypeName: "All Frameworks" } as ApplicationType); setPage(1); setSearchQ(""); }} 
-                />
-             </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                 <AppTypeCard 
+                   at={{ applicationTypeId: -1, applicationTypeName: "All Frameworks", applicationName: "Global Contract Asset View" } as ApplicationType} 
+                   onClick={() => { setSelAppType({ applicationTypeId: -1, applicationTypeName: "All Frameworks" } as ApplicationType); setPage(1); setSearchQ(""); }} 
+                 />
+              </div>
           </div>
 
           {priority.length > 0 && (
@@ -168,7 +168,7 @@ export default function ContractEditPage() {
                 </div>
               </div>
            </div>
-           <div className="hidden sm:flex items-center gap-3 bg-muted/30 p-1.5 rounded-2xl border border-border/50">
+           <div className="hidden lg:flex items-center gap-3 bg-muted/30 p-1.5 rounded-2xl border border-border/50">
              <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input 
@@ -185,8 +185,23 @@ export default function ContractEditPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Search for mobile */}
+        <div className="lg:hidden flex flex-col gap-2 mb-4">
+           <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input 
+                 className="pl-9 h-10 w-full bg-muted/30 border-border/50 rounded-xl" 
+                 placeholder="Search Request ID..." 
+                 value={searchQ} 
+                 onChange={(e) => setSearchQ(e.target.value)} 
+                 onKeyDown={(e) => e.key === "Enter" && handleSearch()} 
+              />
+           </div>
+           <Button onClick={handleSearch} size="sm" className="h-10 rounded-xl bg-amber-500 text-black font-bold">COMMIT SEARCH</Button>
+        </div>
+
         {!cLoading && (contracts?.data ?? []).length > 0 && (
-          <div className="grid grid-cols-[40px_100px_110px_1fr_160px_40px] gap-4 px-6 pb-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em]">
+          <div className="hidden md:grid grid-cols-[40px_100px_110px_1fr_160px_40px] gap-4 px-6 pb-2 text-[10px] font-black text-muted-foreground uppercase tracking-[0.15em]">
             <input
               type="checkbox"
               checked={selectedIds.size > 0 && selectedIds.size === contracts?.data.length}
@@ -222,25 +237,25 @@ export default function ContractEditPage() {
 
           {/* Bulk Action Float Bar - Premium Glass styling */}
           {selectedIds.size > 0 && (
-            <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#0b0e14]/90 backdrop-blur-xl border border-white/5 shadow-[0_32px_64px_rgba(0,0,0,0.8)] rounded-3xl px-8 py-5 flex items-center gap-8 animate-in fade-in slide-in-from-bottom-8 duration-500 z-50">
-              <div className="flex flex-col">
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl bg-[#0b0e14]/90 backdrop-blur-xl border border-white/5 shadow-[0_32px_64px_rgba(0,0,0,0.8)] rounded-3xl px-6 py-4 flex flex-col sm:flex-row items-center gap-4 sm:gap-8 animate-in fade-in slide-in-from-bottom-8 duration-500 z-50">
+              <div className="flex flex-col items-center sm:items-start">
                 <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest leading-none mb-1">Queue Size</span>
                 <span className="text-lg font-black text-white leading-none">{selectedIds.size} Assets</span>
               </div>
-              <div className="h-8 w-[1px] bg-white/10" />
-              <div className="flex gap-4">
+              <div className="hidden sm:block h-8 w-[1px] bg-white/10" />
+              <div className="flex gap-3 w-full sm:w-auto">
                 <Button
                   size="lg"
-                  className="gap-3 rounded-2xl h-14 px-8 bg-white text-black hover:bg-white/90 font-black tracking-tight"
+                  className="flex-1 sm:flex-none gap-3 rounded-2xl h-12 sm:h-14 px-4 sm:px-8 bg-white text-black hover:bg-white/90 font-black tracking-tight text-xs sm:text-base"
                   onClick={() => setBulkStageId(0)}
                 >
-                  <Layers size={18} />
+                  <Layers size={16} />
                   COMMIT BULK STAGE CHANGE
                 </Button>
                 <Button
                   variant="ghost"
                   size="lg"
-                  className="rounded-2xl h-14 px-8 text-white hover:bg-white/5 border border-white/10 font-bold"
+                  className="rounded-2xl h-12 sm:h-14 px-4 sm:px-8 text-white hover:bg-white/5 border border-white/10 font-bold text-xs sm:text-base"
                   onClick={() => setSelectedIds(new Set())}
                 >
                   ABORT
@@ -408,28 +423,37 @@ function ContractRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[40px_100px_110px_1fr_160px_40px] gap-4 items-center px-6 py-4.5 bg-[#131820]/40 border-1.5 rounded-[22px] transition-all duration-300 group",
+        "flex flex-col md:grid md:grid-cols-[40px_100px_110px_1fr_160px_40px] gap-4 items-start md:items-center px-6 py-4.5 bg-[#131820]/40 border-1.5 rounded-[22px] transition-all duration-300 group relative",
         isSelected 
             ? "border-amber-500/50 bg-amber-500/10 shadow-[0_10px_30px_rgba(240,165,0,0.08)]" 
             : "border-[#252d3d] hover:border-[#3a4a62] hover:bg-[#131820]"
       )}
     >
-      <div className="flex justify-center" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+      <div className="flex items-center gap-4 w-full md:w-auto md:justify-center" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
         <div className={cn(
           "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300 cursor-pointer",
           isSelected ? "bg-amber-500 border-amber-500 text-black shadow-lg shadow-amber-500/20" : "border-[#252d3d] bg-[#0b0e14] group-hover:border-amber-500/40"
         )}>
           {isSelected && <Check size={14} strokeWidth={4} />}
         </div>
+        <div className="md:hidden flex-1 flex items-center justify-between">
+           <span className="mono text-[13px] font-black text-amber-500 tracking-tighter">#{contract.id}</span>
+           <Badge 
+                variant={stageToBadge(stage)} 
+                className="text-[9px] font-black uppercase tracking-[0.1em] px-2.5 py-1 rounded-lg border-opacity-50"
+            >
+                {stage}
+            </Badge>
+        </div>
       </div>
       
       <div onClick={onClick} className="contents">
-        <span className="mono text-[13px] font-black text-amber-500 tracking-tighter">#{contract.id}</span>
+        <span className="hidden md:inline mono text-[13px] font-black text-amber-500 tracking-tighter">#{contract.id}</span>
         <span className={cn("mono text-[11px] font-bold", contract.recordId ? "text-blue-400" : "text-[#2d3a52]")}>
           {contract.recordId ? `#REC-${contract.recordId}` : "—"}
         </span>
         
-        <div className="min-w-0 pr-4">
+        <div className="min-w-0 pr-4 w-full md:w-auto">
           <div className="text-[14px] font-extrabold text-[#e2e8f0] group-hover:text-white truncate transition-colors leading-tight mb-1">{party}</div>
           <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wide">
              <span className="truncate">{contract.addedByName || 'System Auto'}</span>
@@ -438,7 +462,7 @@ function ContractRow({
           </div>
         </div>
 
-        <div className="justify-self-start">
+        <div className="hidden md:block justify-self-start">
             <Badge 
                 variant={stageToBadge(stage)} 
                 className="text-[9px] font-black uppercase tracking-[0.1em] px-2.5 py-1 rounded-lg border-opacity-50"
@@ -447,7 +471,7 @@ function ContractRow({
             </Badge>
         </div>
 
-        <div className="justify-self-end text-muted-foreground/30 group-hover:text-amber-500 transition-all group-hover:scale-125">
+        <div className="absolute right-6 top-1/2 -translate-y-1/2 md:static md:translate-y-0 justify-self-end text-muted-foreground/30 group-hover:text-amber-500 transition-all group-hover:scale-125">
             <Edit3 size={16} />
         </div>
       </div>

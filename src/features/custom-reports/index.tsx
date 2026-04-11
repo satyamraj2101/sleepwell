@@ -103,8 +103,8 @@ export default function CustomReportsPage() {
               )}
 
               {!dLoading && rows.length > 0 && (
-                <div className="border border-border rounded-lg overflow-x-auto">
-                  <table className="w-full text-xs">
+                <div className="border border-border rounded-lg overflow-x-auto scrollbar-thin">
+                  <table className="w-full text-xs min-w-[800px]">
                     <thead>
                       <tr className="bg-muted/50 border-b border-border">
                         {columns.map(c => <th key={c} className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">{c}</th>)}

@@ -164,9 +164,11 @@ export default function LegalPartyPage() {
         />
       )}
 
+      {/* Legal party table */}
       {parties.length > 0 && (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="border border-border rounded-lg overflow-hidden shadow-sm bg-card">
+          <div className="overflow-x-auto scrollbar-thin">
+            <table className="w-full text-sm min-w-[800px]">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
                 <th className="px-3 py-2 w-8">

@@ -136,10 +136,10 @@ export default function UserMaskPage() {
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         <StatCard label="Total users" value={stats.total} />
         <StatCard label="Masked (UAT safe)" value={stats.masked} sub="email starts with 'x'" className="border border-amber-500/30" />
-        <StatCard label="Unmasked (live)" value={stats.unmasked} sub="real email active" className="border border-green-500/30" />
+        <StatCard label="Unmasked (live)" value={stats.unmasked} sub="real email active" className="border border-green-500/30 sm:col-span-2 lg:col-span-1" />
       </div>
 
       {/* Loading progress bar (initial fetch) */}
@@ -171,31 +171,34 @@ export default function UserMaskPage() {
       )}
 
       {/* Controls */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <div className="flex-1 min-w-48">
+      <div className="flex flex-col md:flex-row gap-3 mb-4">
+        <div className="flex-1 min-w-0">
           <Input
-            placeholder="Search by name, email, department…"
+            placeholder="Search users..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9"
           />
         </div>
-        <div className="flex gap-1">
-          {(["all", "masked", "unmasked"] as Filter[]).map((f) => (
-            <Button key={f} variant={filter === f ? "secondary" : "outline"} size="sm" onClick={() => setFilter(f)} className="capitalize h-9">
-              {f}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <div className="flex gap-1">
+            {(["all", "masked", "unmasked"] as Filter[]).map((f) => (
+              <Button key={f} variant={filter === f ? "secondary" : "outline"} size="sm" onClick={() => setFilter(f)} className="capitalize h-9 px-3">
+                {f}
+              </Button>
+            ))}
+          </div>
+          <div className="h-4 w-px bg-border mx-1 hidden md:block" />
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => handleBulkAction("mask")} disabled={mutation.isPending} className="gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 h-9">
+              <EyeOff size={13} />
+              <span className="truncate">{selected.size > 0 ? `Mask ${selected.size}` : "Mask All"}</span>
             </Button>
-          ))}
-        </div>
-        <div className="flex gap-2 ml-auto">
-          <Button size="sm" variant="outline" onClick={() => handleBulkAction("mask")} disabled={mutation.isPending} className="gap-1.5 border-amber-500/40 text-amber-500 hover:bg-amber-500/10">
-            <EyeOff size={13} />
-            {selected.size > 0 ? `Mask ${selected.size}` : `Mask All (${filtered.length})`}
-          </Button>
-          <Button size="sm" onClick={() => handleBulkAction("unmask")} disabled={mutation.isPending} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white">
-            <Eye size={13} />
-            {selected.size > 0 ? `Unmask ${selected.size}` : `Unmask All (${filtered.length})`}
-          </Button>
+            <Button size="sm" onClick={() => handleBulkAction("unmask")} disabled={mutation.isPending} className="gap-1.5 bg-green-600 hover:bg-green-700 text-white h-9">
+              <Eye size={13} />
+              <span className="truncate">{selected.size > 0 ? `Unmask ${selected.size}` : "Unmask All"}</span>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -220,17 +223,18 @@ export default function UserMaskPage() {
 
       {/* Virtualized table */}
       {!isLoading && filtered.length > 0 && (
-        <div className="border border-border rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
-          {/* Fixed header */}
-          <div className="bg-muted/50 border-b border-border grid grid-cols-[32px_1fr_1fr_160px_180px_80px] gap-0 flex-shrink-0">
-            {["", "Username (real)", "Current email", "Department", "Role", "Status"].map((h, i) => (
-              <div key={i} className={cn("px-3 py-2 text-xs font-medium text-muted-foreground", i === 0 && "flex items-center justify-center")}>
-                {i === 0
-                  ? <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded" />
-                  : h}
-              </div>
-            ))}
-          </div>
+        <div className="border border-border rounded-lg overflow-hidden flex flex-col flex-1 min-h-0 bg-card shadow-sm">
+          <div className="overflow-x-auto flex-1 flex flex-col min-h-0 scrollbar-thin">
+            {/* Fixed header */}
+            <div className="bg-muted/50 border-b border-border grid grid-cols-[40px_1fr_1fr_160px_180px_100px] min-w-[800px] gap-0 flex-shrink-0">
+              {["", "Username (real)", "Current email", "Department", "Role", "Status"].map((h, i) => (
+                <div key={i} className={cn("px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider", i === 0 && "flex items-center justify-center")}>
+                  {i === 0
+                    ? <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded accent-amber-500" />
+                    : h}
+                </div>
+              ))}
+            </div>
 
           {/* Virtual scroll container */}
           <div
@@ -257,13 +261,13 @@ export default function UserMaskPage() {
                       minHeight: ROW_HEIGHT,
                     }}
                     className={cn(
-                      "grid grid-cols-[32px_1fr_1fr_160px_180px_80px] gap-0 border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer transition-colors",
+                      "grid grid-cols-[40px_1fr_1fr_160px_180px_100px] min-w-[800px] gap-0 border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer transition-colors",
                       isSel && "bg-muted/50"
                     )}
                     onClick={() => toggleOne(user.id)}
                   >
-                    <div className="px-3 flex items-center justify-center">
-                      <input type="checkbox" checked={isSel} readOnly className="rounded" />
+                    <div className="px-4 flex items-center justify-center">
+                      <input type="checkbox" checked={isSel} readOnly className="rounded accent-amber-500" />
                     </div>
                     <div className="px-3 py-2.5 flex items-center">
                       <span className="mono text-xs text-muted-foreground truncate">{user.userName}</span>
@@ -295,7 +299,8 @@ export default function UserMaskPage() {
             </div>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Confirmation Modal */}
       {confirmAction && (

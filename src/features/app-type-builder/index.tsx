@@ -108,7 +108,7 @@ export default function AppTypeBuilderPage() {
 
       {/* Stats */}
       {!isLoading && allTypes.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: "Total", value: stats.total, filter: "all" as const },
             { label: "Active", value: stats.active, filter: "active" as const, color: "text-emerald-400" },
@@ -149,7 +149,7 @@ export default function AppTypeBuilderPage() {
 
       {/* Table */}
       {!isLoading && (
-        <div className="border border-border rounded-xl overflow-hidden">
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
               <Layers size={28} className="mx-auto text-muted-foreground/30 mb-3" />
@@ -159,7 +159,8 @@ export default function AppTypeBuilderPage() {
               </Button>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
                   <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-20">ID</th>
