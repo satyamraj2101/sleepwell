@@ -241,7 +241,7 @@ export default function AppTypeBuilderPage() {
                 })}
               </tbody>
             </table>
-          )}
+          </div>
         </div>
       )}
 

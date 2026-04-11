@@ -209,6 +209,7 @@ export default function LegalPartyPage() {
             </tbody>
           </table>
         </div>
+      </div>
       )}
 
       {/* Pagination */}
