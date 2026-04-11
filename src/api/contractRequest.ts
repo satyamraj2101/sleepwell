@@ -310,7 +310,58 @@ export async function bulkUpdateStage(
   return res.data;
 }
 
-// POST /api/{tenant}/contract-request-document/generate-version
+// GET /api/{tenant}/v1/Questionnaire
+export async function getQuestionnaire(
+  client: AxiosInstance,
+  tenant: string,
+  params: {
+    contractTemplateId: number;
+    applicationTypeId: number;
+    requestorUsername: string;
+    requestId?: number;
+  }
+): Promise<any> {
+  const res = await client.get(`/api/${tenant}/v1/Questionnaire`, {
+    params: {
+      ContractTemplateId: params.contractTemplateId,
+      ApplicationTypeId: params.applicationTypeId,
+      RequestorUsername: params.requestorUsername,
+      RequestId: params.requestId,
+    },
+  });
+  return res.data;
+}
+
+// POST /api/{tenant}/v1/Questionnaire
+// Content-Type: multipart/form-data (FORM DATA)
+export async function submitQuestionnaire(
+  client: AxiosInstance,
+  tenant: string,
+  payload: {
+    ApplicationTypeId: number;
+    ContractTemplateId: number;
+    RequestId: number;
+    IsAI: boolean;
+    TemplateJson: string;
+  }
+): Promise<ApiResponse<string>> {
+  const formData = new FormData();
+  formData.append("ApplicationTypeId", String(payload.ApplicationTypeId));
+  formData.append("ContractTemplateId", String(payload.ContractTemplateId));
+  formData.append("RequestId", String(payload.RequestId));
+  formData.append("IsAI", String(payload.IsAI));
+  formData.append("TemplateJson", payload.TemplateJson);
+
+  const res = await client.post<ApiResponse<string>>(
+    `/api/${tenant}/v1/Questionnaire`,
+    formData
+  );
+  return res.data;
+}
+
+/**
+ * @deprecated Use Questionnaire flow instead
+ */
 export async function generateContractVersion(
   client: AxiosInstance,
   tenant: string,

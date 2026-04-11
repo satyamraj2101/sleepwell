@@ -13,7 +13,7 @@ import { PageHeader, Spinner } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
-import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, generateContractVersion } from "@/api/contractRequest";
+import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, generateContractVersion, getQuestionnaire, submitQuestionnaire } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
 import { getPreExecutionApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
@@ -1017,7 +1017,7 @@ export default function BulkTestCreatorPage() {
     queryKey: QK.appTypes(tenant),
     queryFn: async () => {
       const { listApplicationTypes } = await import("@/api/applicationTypes");
-      return listApplicationTypes(clients!.oldProd, tenant, tenant);
+      return listApplicationTypes(clients!.oldProd, tenant, username);
     },
     enabled: !!clients,
   });
@@ -1405,17 +1405,44 @@ export default function BulkTestCreatorPage() {
       patchStep(run.id, "version", { status: "running" });
       const tg = Date.now();
 
-      if (effectiveTemplateId && !run.requestId) {
-        // New contract with template: explicitly call generate-version so Leah creates the document
+      if (effectiveTemplateId) {
+        // Step 2a: Document Generation via Official Questionnaire API
+        // Spec Page 182 & 193
         try {
-          await generateContractVersion(clients.newCloud, tenant, {
-            requestId: Number(requestId),
+          const qData = await getQuestionnaire(clients.oldProd, tenant, {
             contractTemplateId: effectiveTemplateId,
+            applicationTypeId: selAppTypeId!,
+            requestorUsername: username,
+            requestId: Number(requestId),
           });
+
+          // Map our run-specific field values into the questionnaire schema
+          if (qData && qData.fields) {
+            qData.fields.forEach((f: any) => {
+              // Priority mapping: ctgFieldName (F123), backendTag (123), fieldId
+              const tagId = f.backendTag || f.fieldId || (f.ctgFieldName ? f.ctgFieldName.slice(1) : null);
+              const ourVal = latestRun.fieldValues[String(tagId)];
+              if (ourVal) {
+                f.value = ourVal;
+              } else if (f.mandatory && !f.value) {
+                f.value = "Auto Test Value";
+              }
+            });
+          }
+
+          await submitQuestionnaire(clients.oldProd, tenant, {
+            ApplicationTypeId: selAppTypeId!,
+            ContractTemplateId: effectiveTemplateId,
+            RequestId: Number(requestId),
+            IsAI: false,
+            TemplateJson: JSON.stringify(qData),
+          });
+
           await new Promise(r => setTimeout(r, 2500)); // wait for async generation
-        } catch {
-          // If generate-version fails, still try version-history (might have auto-generated)
-          await new Promise(r => setTimeout(r, 2000));
+        } catch (err) {
+          console.error("Document generation (Questionnaire) failed", err);
+          // Non-blocking for history check
+          await new Promise(r => setTimeout(r, 1000));
         }
       }
 
@@ -1494,11 +1521,21 @@ export default function BulkTestCreatorPage() {
       const t2 = Date.now();
       try {
         const appRes: any = await getPreExecutionApprovals(clients.newCloud, tenant, requestId!);
-        // Handle Leah double-wrap: { data: { data: { approvals: [] } } } OR { data: { approvals: [] } }
+        // Handle Leah double-wrap and varying casing
         const inner = appRes?.data?.data ?? appRes?.data ?? appRes;
-        const list: PreExecutionApproval[] = inner?.approvals ?? appRes?.approvals ?? [];
-        const count = Array.isArray(list) ? list.length : 0;
-        patchRun(run.id, { approvals: Array.isArray(list) ? list : [] });
+        const rawList = inner?.approvals ?? appRes?.approvals ?? [];
+        const list: PreExecutionApproval[] = (Array.isArray(rawList) ? rawList : []).map((a: any) => ({
+          approvalId:     Number(a.approvalId ?? 0),
+          approverName:   String(a.approvername ?? a.approverName ?? a.fullName ?? "Unknown Approver"),
+          approverUserId: Number(a.approverUserId ?? a.userId ?? 0),
+          approverRole:   String(a.approverrole ?? a.approverRole ?? ""),
+          status:         (a.status ?? "Pending") as any,
+          condition:      String(a.condition ?? ""),
+          actionedOn:     a.actionedOn ?? null,
+          comments:       a.comments ?? null,
+        }));
+        const count = list.length;
+        patchRun(run.id, { approvals: list });
         patchStep(run.id, "approvals", {
           status: count > 0 ? "warn" : "pass",
           result: count > 0 ? `${count} approval trigger${count !== 1 ? "s" : ""}` : "No approvals required",
