@@ -1459,7 +1459,7 @@ export default function BulkTestCreatorPage() {
       // Polling up to 3 times with increasing delay to ensure Leah finishes background generation
       let allVersions: VersionRecord[] = [];
       let pollCount = 0;
-      const maxPolls = 3;
+      const maxPolls = 10; // Poll for up to 40 seconds
 
       while (pollCount < maxPolls) {
         try {
@@ -1490,7 +1490,7 @@ export default function BulkTestCreatorPage() {
         } catch { /* ignore inner error during polling */ }
 
         pollCount++;
-        if (pollCount < maxPolls) await new Promise(r => setTimeout(r, 2000 + pollCount * 1000));
+        if (pollCount < maxPolls) await new Promise(r => setTimeout(r, 4000));
       }
 
       if (allVersions.length > 0) {
