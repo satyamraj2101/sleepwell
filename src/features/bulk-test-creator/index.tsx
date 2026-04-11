@@ -554,8 +554,6 @@ function RunCard({
     return groups;
   }, [allFields]);
 
-  const fieldCount = Object.keys(run.fieldValues).length;
-  const filledCount = Object.values(run.fieldValues).filter(Boolean).length;
 
   // All collaborators/signatories from all versions
   const allSignatories = useMemo(() => {
