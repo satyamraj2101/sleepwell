@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download,
+  FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download, Import,
   XCircle, Loader2, Plus, Edit2, X, Search, Clock,
   Copy, ExternalLink, CheckSquare, Square, AlertTriangle, RotateCcw, Eye,
   FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp,
@@ -1051,6 +1051,8 @@ export default function BulkTestCreatorPage() {
   const [fieldSearch, setFieldSearch] = useState("");
   const [globalClientId, setGlobalClientId] = useState<number | null>(null);
   const [globalPartyId, setGlobalPartyId] = useState<number | null>(null);
+  const [importInput, setImportInput] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
   // ── localStorage keys for custom mode persistence ──────────────────────────
   const lsSelKey  = selAppTypeId ? `btc-custom-sel-${tenant}-${selAppTypeId}` : null;
@@ -1398,6 +1400,54 @@ export default function BulkTestCreatorPage() {
       r.id === runId ? { ...r, steps: r.steps.map(s => s.id === stepId ? { ...s, ...patch } : s) } : r
     ));
   }, []);
+ 
+  async function handleImport() {
+    if (!clients) return;
+    const ids = importInput.split(/[\s,]+/).map(s => s.trim()).filter(s => s && !isNaN(Number(s)));
+    if (ids.length === 0) return toast.error("Enter valid numeric Request IDs");
+
+    setIsImporting(true);
+    const toastId = toast.loading(`Importing ${ids.length} requests...`);
+    
+    try {
+      const newRuns: TestRun[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        const rid = Number(ids[i]);
+        try {
+          const detail = await getContractDetail(clients.newCloud, tenant, rid);
+          const appTypeId = detail.applicationTypeId;
+          const at = (appTypesRaw as any[]).find(a => a.applicationTypeId === appTypeId);
+          const appTypeName = at?.applicationTypeName || (detail as any).applicationTypeName || "Imported Type";
+          
+          newRuns.push({
+            id: `import-${rid}-${Date.now()}`,
+            index: runs.length + i + 1,
+            appTypeId,
+            appTypeName,
+            requestId: rid,
+            recordId: detail.recordId ?? 0,
+            status: "idle",
+            steps: buildSteps().map(s => s.id === "create" ? { ...s, status: "pass", result: `Imported REQ-${rid}` } : s),
+            fieldValues: {}, 
+            editOpen: false,
+            currentStage: (detail as any).workflowStage || (detail as any).currentStage || "Imported",
+          });
+        } catch (e) {
+          console.error(`Failed to import REQ-${rid}`, e);
+        }
+      }
+      
+      if (newRuns.length > 0) {
+        setRuns(prev => [...prev, ...newRuns]);
+        setImportInput("");
+        toast.success(`Successfully imported ${newRuns.length} request(s)`, { id: toastId });
+      } else {
+        toast.error("Failed to import any requests. Check if IDs exist.", { id: toastId });
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   function handlePrepare() {
     if (!selAppTypeId || !selectedAppType) return toast.error("Select an Application Type first");
@@ -1883,6 +1933,37 @@ export default function BulkTestCreatorPage() {
                   Prepare
                 </Button>
               </div>
+            </div>
+          </div>
+
+          {/* Bulk Import card */}
+          <div className="border border-border rounded-xl bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Bulk Import IDs</h3>
+              <Import size={12} className="text-muted-foreground" />
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Request IDs</label>
+                <textarea
+                  value={importInput}
+                  onChange={e => setImportInput(e.target.value)}
+                  placeholder="e.g. 12345, 12346, 12347"
+                  className="w-full min-h-[80px] text-xs bg-background border border-border rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-ring resize-none font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Separate IDs by comma, space or newline.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full h-9 gap-1.5 text-xs border-indigo-500/30 hover:bg-indigo-500/10 hover:text-indigo-400 transition-all"
+                onClick={handleImport}
+                disabled={isImporting || !importInput.trim()}
+              >
+                {isImporting ? <Loader2 size={13} className="animate-spin" /> : <Import size={13} />}
+                Import Requests
+              </Button>
             </div>
           </div>
 
