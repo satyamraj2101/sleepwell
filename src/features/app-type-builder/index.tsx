@@ -242,8 +242,9 @@ export default function AppTypeBuilderPage() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* Pagination */}
       {(data?.totalRecords ?? 0) > 50 && (
