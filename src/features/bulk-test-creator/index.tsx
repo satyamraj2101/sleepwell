@@ -511,9 +511,9 @@ function StepPill({ step }: { step: TestStep }) {
 function RunCard({
   run, allFields, cloudInstance, liveClients, liveParties,
   onRun, onDelete, onToggleEdit,
-  onFieldChange, onClientChange, onPartyChange, onTemplateChange,
+  onFieldChange, onClientChange, onPartyChange,
   onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, isRunningAll,
-  newCloudApi, token,
+  newCloudApi,
 }: {
   run: TestRun;
   allFields: FlatField[];
@@ -526,14 +526,12 @@ function RunCard({
   onFieldChange: (fieldId: string, value: string) => void;
   onClientChange: (id: number | null) => void;
   onPartyChange: (id: number | null) => void;
-  onTemplateChange: (id: number | null, name: string | undefined) => void;
   onSaveAndRerun: () => void;
   onViewContract: () => void;
   onPreviewDoc: () => void;
   onPreviewVersion: (versionId: number, fileName: string) => void;
   isRunningAll: boolean;
   newCloudApi: string;
-  token: string;
 }) {
   const { tenant } = useAuthStore();
   const isRun = run.status === "running";
@@ -707,7 +705,7 @@ function RunCard({
                 </span>
               </div>
               <div className="space-y-1.5">
-                {run.versions!.map((v, i) => (
+                {run.versions!.map((v) => (
                   <div key={v.versionId} className={cn(
                     "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border",
                     v.versionId === run.generatedVersionId
@@ -1911,7 +1909,6 @@ export default function BulkTestCreatorPage() {
               cloudInstance={cloudInstance || ""}
               liveClients={liveClients}
               liveParties={liveParties}
-              templates={templates}
               isRunningAll={isRunningAll}
               onRun={() => executeRun(run)}
               onDelete={() => setRuns(prev => prev.filter(r => r.id !== run.id))}
@@ -1925,7 +1922,6 @@ export default function BulkTestCreatorPage() {
               }}
               onClientChange={(id) => patchRun(run.id, { selectedClientId: id })}
               onPartyChange={(id) => patchRun(run.id, { selectedPartyId: id })}
-              onTemplateChange={(id, name) => patchRun(run.id, { selectedTemplateId: id ?? undefined, selectedTemplateName: name })}
               onSaveAndRerun={() => executeRun(run)}
               onViewContract={() => run.requestId && setViewContractId(run.requestId)}
               onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
