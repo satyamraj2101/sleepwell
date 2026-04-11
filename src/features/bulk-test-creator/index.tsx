@@ -1436,6 +1436,7 @@ export default function BulkTestCreatorPage() {
             RequestId: Number(requestId),
             IsAI: false,
             TemplateJson: JSON.stringify(qData),
+            requestorUsername: username,
           });
 
           await new Promise(r => setTimeout(r, 2500)); // wait for async generation

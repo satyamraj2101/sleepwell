@@ -343,6 +343,7 @@ export async function submitQuestionnaire(
     RequestId: number;
     IsAI: boolean;
     TemplateJson: string;
+    requestorUsername: string;
   }
 ): Promise<ApiResponse<string>> {
   const formData = new FormData();
@@ -351,6 +352,7 @@ export async function submitQuestionnaire(
   formData.append("RequestId", String(payload.RequestId));
   formData.append("IsAI", String(payload.IsAI));
   formData.append("TemplateJson", payload.TemplateJson);
+  formData.append("RequestorUsername", payload.requestorUsername);
 
   const res = await client.post<ApiResponse<string>>(
     `/api/${tenant}/v1/Questionnaire`,
