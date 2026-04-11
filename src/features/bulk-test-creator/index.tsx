@@ -15,7 +15,7 @@ import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
 import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, getQuestionnaire, submitQuestionnaire } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
-import { getPreExecutionApprovals, getSnapshotApprovals } from "@/api/approval";
+import { getSnapshotApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";

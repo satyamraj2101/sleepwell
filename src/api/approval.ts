@@ -1,5 +1,5 @@
 import { AxiosInstance } from "axios";
-import { PreExecutionApprovalResponse } from "@/types";
+import { PreExecutionApprovalResponse, PreExecutionApproval } from "@/types";
 
 export async function getPreExecutionApprovals(
   client: AxiosInstance,
