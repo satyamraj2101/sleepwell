@@ -1910,6 +1910,7 @@ export default function BulkTestCreatorPage() {
               liveClients={liveClients}
               liveParties={liveParties}
               isRunningAll={isRunningAll}
+              newCloudApi={newCloudApi || ""}
               onRun={() => executeRun(run)}
               onDelete={() => setRuns(prev => prev.filter(r => r.id !== run.id))}
               onToggleEdit={() => patchRun(run.id, { editOpen: !run.editOpen })}
@@ -1925,6 +1926,7 @@ export default function BulkTestCreatorPage() {
               onSaveAndRerun={() => executeRun(run)}
               onViewContract={() => run.requestId && setViewContractId(run.requestId)}
               onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
+              onPreviewVersion={(versionId, fileName) => setPreviewVersion({ versionId, fileName })}
             />
           ))}
         </div>
