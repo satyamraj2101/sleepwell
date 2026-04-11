@@ -67,7 +67,7 @@ interface TestRun {
   selectedTemplateId?: number;  // per-run override (only shown when multiple templates)
   selectedTemplateName?: string;
   requestId?: number;
-  recordId?: number;
+  recordId?: number | string;
   generatedVersionId?: number;  // versionId from version-history after run
   generatedFileName?: string;
   status: RunStatus;
@@ -1569,7 +1569,7 @@ export default function BulkTestCreatorPage() {
           });
 
           if (allVersions.length > 0) {
-            updateRun({ id: run.id, versions: allVersions });
+            patchRun(run.id, { versions: allVersions });
             break;
           }
         } catch (e) {
