@@ -5,11 +5,11 @@ import {
   FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download, Import,
   XCircle, Loader2, Plus, Edit2, X, Search, Clock,
   Copy, ExternalLink, CheckSquare, Square, AlertTriangle, RotateCcw, Eye,
-  FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp, Settings as SettingsIcon, Layers,
+  FileText, Users, Shield, ChevronDown, ChevronUp, Settings as SettingsIcon, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { PageHeader, Spinner } from "@/components/shared/PageHeader";
+import { Spinner } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ import { listUsers } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
 import { getESignStatus, sendESignRequest } from "@/api/esign";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
-import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef } from "@/types";
+import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef, ESignRecipient } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1952,8 +1952,6 @@ export default function BulkTestCreatorPage() {
     if (runs.length === 0) return;
     abortRef.current = false;
     setIsRunningAll(true);
-    
-    const capturedIds: number[] = [];
     
     for (const run of runs) {
       if (abortRef.current) break;
