@@ -515,3 +515,52 @@ export interface PaginationParams {
   direction?: boolean;
   orderBy?: string;
 }
+
+// ─── Electronic Signature (eSign) ─────────────────────────────────────────────
+export interface ESignRecipient {
+  name: string;
+  email: string;
+  order?: number;
+  status?: string;
+  sendDate?: string;
+  receivedDate?: string;
+  isCC?: boolean;
+  addedBy?: string;
+  addedOn?: string;
+}
+
+export interface ESignStatusResponse {
+  contractID: number;
+  requestId: number;
+  contractVersionId: number;
+  status: string;
+  recipientStatus: ESignRecipient[];
+  isESignSummaryAvailable: boolean;
+  isAllowedDownloadAsSeperateDocument: boolean;
+}
+
+export interface SendESignPayload {
+  RequestId: number;
+  ContractId: number;
+  ContractVersionId: number;
+  RequestorUsername: string;
+  Recipients: Array<{ 
+    Name: string; 
+    EmailId: string; 
+    Order: number;
+    TemplateForm?: boolean;
+    IncludeApprovalHistory?: boolean;
+  }>;
+  Subject?: string;
+  Message?: string;
+  IsDraft?: boolean;
+  ShouldBeSanitized?: boolean;
+  isContractFileHasComment?: boolean;
+  EmailTemplateId?: string;
+  SupportingDocumentIds?: string;
+  SigningSystemAccountId?: number;
+  GenerateRecipientViewer?: boolean;
+  AddApprovalAuditHistory?: boolean;
+  OnlyIncludeLatestVersionApprovals?: boolean;
+  documentOrder: Array<{ Id: number; Type: "Contract" | "Attachment" }>;
+}

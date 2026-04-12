@@ -8,7 +8,7 @@ import {
   FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
 import { PageHeader, Spinner } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
@@ -18,6 +18,7 @@ import { getContractTemplates } from "@/api/applicationTypes";
 import { getSnapshotApprovals } from "@/api/approval";
 import { listUsers } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
+import { getESignStatus, sendESignRequest } from "@/api/esign";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
 import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef } from "@/types";
 
@@ -88,6 +89,12 @@ interface TestRun {
   versions?: VersionRecord[];
   actionTaken?: boolean;
   availableActions?: Array<{ code: string; workflowCommandName?: string; displayText?: string }>;
+  // eSign
+  includeSignature?: boolean;
+  esignSignatories?: ESignRecipient[];
+  esignSubject?: string;
+  esignMessage?: string;
+  esignStatus?: any; // ESignStatusResponse
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -342,6 +349,7 @@ function buildSteps(): TestStep[] {
     { id: "create",    label: "Create / Update",  status: "idle" },
     { id: "version",   label: "Version History",  status: "idle" },
     { id: "fetch",     label: "Fetch & Verify",   status: "idle" },
+    { id: "esign",     label: "E-Signature",      status: "idle" },
     { id: "approvals", label: "Approval Check",   status: "idle" },
     { id: "stage",     label: "Workflow Stage",   status: "idle" },
     { id: "fields",    label: "Metadata Audit",   status: "idle" },
@@ -517,7 +525,7 @@ function RunCard({
   run, allFields, cloudInstance, liveClients, liveParties,
   onRun, onDelete, onToggleEdit,
   onFieldChange, onClientChange, onPartyChange,
-  onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, isRunningAll,
+  onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, onESignTest, isRunningAll,
   newCloudApi,
 }: {
   run: TestRun;
@@ -535,6 +543,7 @@ function RunCard({
   onViewContract: () => void;
   onPreviewDoc: () => void;
   onPreviewVersion: (versionId: number, fileName: string) => void;
+  onESignTest: () => void;
   isRunningAll: boolean;
   newCloudApi: string;
 }) {
@@ -673,15 +682,30 @@ function RunCard({
           </div>
 
           {!isRunningAll && (
-            <Button
-              size="sm"
-              className={cn("h-7 gap-1 text-[11px] px-3", isDone || isErr ? "bg-muted hover:bg-muted/80 text-foreground border border-border" : "bg-amber-500 hover:bg-amber-600 text-black font-semibold shadow-sm")}
-              variant={isDone || isErr ? "outline" : "default"}
-              onClick={onRun} disabled={isRun}
-            >
-              {isRun ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-              {run.requestId ? "Rerun" : "Run"}
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                className={cn("h-7 gap-1 text-[11px] px-3", isDone || isErr ? "bg-muted hover:bg-muted/80 text-foreground border border-border" : "bg-amber-500 hover:bg-amber-600 text-black font-semibold shadow-sm")}
+                variant={isDone || isErr ? "outline" : "default"}
+                onClick={onRun} disabled={isRun}
+              >
+                {isRun ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                {run.requestId ? "Rerun" : "Run"}
+              </Button>
+              
+              {run.requestId && isDone && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-[11px] px-2 text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+                  onClick={onESignTest}
+                  disabled={isRun}
+                  title="Manual Signature Request"
+                >
+                  <Users size={11} /> Sign Test
+                </Button>
+              )}
+            </div>
           )}
           <button onClick={onDelete} className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0">
             <Trash2 size={13} />
@@ -858,33 +882,48 @@ function RunCard({
                           a.isApproved ? "bg-emerald-500/20 text-emerald-400" :
                           (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"
                         )}>{(a.statusName || a.status).toUpperCase()}</span>
-                      </div>
-                      {a.approverRole && a.approverRole !== a.statusName && (
                         <div className="text-[10px] opacity-40 truncate mt-0.5">{a.approverRole}</div>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : <div className="text-[11px] text-emerald-400/60 italic px-1">No approvals required</div>}
             </div>
 
-            {/* Signatories (collaborators) */}
-            <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-1.5">
-                <Users size={11} className="text-purple-400" />
-                <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Signatories</span>
-              </div>
-              {allSignatories.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {allSignatories.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
-                      <span className="truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
-                      {s.email && <span className="text-[9px] opacity-40 hidden sm:inline">{s.email}</span>}
-                    </div>
-                  ))}
+              {/* Signatories (E-Signature status) */}
+              <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
+                <div className="flex items-center gap-1.5">
+                  <Users size={11} className="text-purple-400" />
+                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Signatories</span>
                 </div>
-              ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
-            </div>
+                {run.esignStatus ? (
+                  <div className="space-y-1">
+                    {run.esignStatus.recipientStatus.map((s: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
+                        <div className="min-w-0 pr-2">
+                          <div className="font-bold truncate">{s.name}</div>
+                          <div className="text-[9px] opacity-60 truncate">{s.email}</div>
+                        </div>
+                        <span className={cn(
+                          "text-[9px] font-bold px-1.5 rounded-sm shadow-sm",
+                          s.status === "Signed" ? "bg-emerald-500/20 text-emerald-400" :
+                          s.status === "Declined" ? "bg-red-500/20 text-red-400" :
+                          "bg-purple-500/20 text-purple-400"
+                        )}>{s.status?.toUpperCase() || "PENDING"}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : allSignatories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allSignatories.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
+                        <span className="truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
+                        {s.email && <span className="text-[9px] opacity-40 hidden sm:inline">{s.email}</span>}
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
+              </div>
           </div>
 
           {/* Context: Clients, Parties, Requester */}
@@ -899,15 +938,18 @@ function RunCard({
               <div className="flex items-center gap-1.5">
                 <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Clients</span>
                 <div className="flex gap-1">
-                  {run.contractClients!.map((c, i) => (
-                    <span key={i} className={cn(
-                      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
-                      c.isPrimary ? "bg-amber-500/10 border-amber-500/25 text-amber-400" : "bg-muted/30 border-border text-muted-foreground"
-                    )}>
-                      {c.clientName ?? `#${c.clientId}`}
-                      {c.isPrimary && <span className="text-[7px]">★</span>}
-                    </span>
-                  ))}
+                  {run.contractClients!.map((c, i) => {
+                    const mappedName = liveClients.find(lc => lc.id === c.clientId)?.name;
+                    return (
+                      <span key={i} className={cn(
+                        "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
+                        c.isPrimary ? "bg-amber-500/10 border-amber-500/25 text-amber-400" : "bg-muted/30 border-border text-muted-foreground"
+                      )}>
+                        {mappedName || c.clientName || `#${c.clientId}`}
+                        {c.isPrimary && <span className="text-[7px]">★</span>}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1024,6 +1066,15 @@ export default function BulkTestCreatorPage() {
   const [globalPartyId, setGlobalPartyId] = useState<number | null>(null);
   const [importInput, setImportInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+
+  // eSign Setup State
+  const [includeSignature, setIncludeSignature] = useState(false);
+  const [signatories, setSignatories] = useState([
+    { name: "Suresh Singh", email: "suresh.singh@integreon.com", order: 1 },
+    { name: "Satyam Raj", email: "satyam.raj@integreon.com", order: 2 }
+  ]);
+  const [esignSubject, setEsignSubject] = useState("Leah CLM - Signature Request for Contract");
+  const [esignMessage, setEsignMessage] = useState("<p>Hello,</p><p>Please review and sign the attached contract.</p><p>Regards,<br/>Leah Automation</p>");
 
   // ── localStorage keys for custom mode persistence ──────────────────────────
   const lsSelKey  = selAppTypeId ? `btc-custom-sel-${tenant}-${selAppTypeId}` : null;
@@ -1438,6 +1489,10 @@ export default function BulkTestCreatorPage() {
       selectedClientId: prepareClientId,
       selectedPartyId: globalPartyId,
       editOpen: false,
+      includeSignature,
+      esignSignatories: [...signatories],
+      esignSubject,
+      esignMessage,
     }));
     setRuns(newRuns);
     toast.success(`${runCount} run${runCount !== 1 ? "s" : ""} prepared`);
@@ -1645,6 +1700,18 @@ export default function BulkTestCreatorPage() {
           .then(r => Boolean(r.data?.data ?? r.data)).catch(() => false),
       ]);
       const stage = (detail as any)?.workflowStage ?? (detail as any)?.currentStage ?? "Unknown";
+      // Fetch eSign status if possible
+      let esStat = undefined;
+      try {
+        esStat = await getESignStatus(clients.oldProd, tenant, {
+          contractId: Number(detail.id),
+          requestId: requestId!,
+          requestorUsername: username
+        });
+      } catch (e) {
+        console.warn("Initial eSign status fetch failed", e);
+      }
+
       patchStep(run.id, "fetch", { status: "pass", result: `Stage: ${stage}`, durationMs: Date.now() - t1 });
       patchRun(run.id, {
         currentStage: stage,
@@ -1654,7 +1721,51 @@ export default function BulkTestCreatorPage() {
         contractClients: (detail.clients ?? []) as ClientRef[],
         contractParties: (detail.legalParties ?? []) as LegalPartyRef[],
         requesterName: (detail.requesterUser as any)?.fullName ?? (detail.requesterUser as any)?.userName ?? undefined,
+        esignStatus: esStat,
       });
+
+      // Step 3.5: Automated E-Signature
+      if (latestRun.includeSignature && requestId) {
+        patchStep(run.id, "esign", { status: "running" });
+        try {
+          // We need the latest version ID to send for signature
+          // Use values from local scope rather than stale latestRun
+          const vId = latestRun.generatedVersionId || (allVersions.length > 0 ? (allVersions.find(v => v.isGeneratedFromTemplate) ?? allVersions[0]).versionId : undefined);
+          const signatories = latestRun.esignSignatories ?? [];
+          
+          if (vId && signatories.length > 0) {
+            await sendESignRequest(clients.oldProd, tenant, {
+              RequestId: requestId,
+              ContractId: Number(detail.id),
+              ContractVersionId: vId,
+              RequestorUsername: username,
+              Recipients: signatories.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order })),
+              Subject: latestRun.esignSubject,
+              Message: latestRun.esignMessage,
+              SupportingDocumentIds: String(vId),
+              documentOrder: [{ Id: vId, Type: "Contract" }]
+            });
+            
+            // Immediately fetch status to reveal signatories
+            try {
+              const esRes = await getESignStatus(clients.oldProd, tenant, {
+                contractId: Number(detail.id),
+                requestId: requestId!,
+                requestorUsername: username
+              });
+              patchRun(run.id, { esignStatus: esRes });
+            } catch (e) {
+              console.warn("Post-esign status fetch failed", e);
+            }
+
+            patchStep(run.id, "esign", { status: "pass", result: "Signature request submitted" });
+          } else {
+            patchStep(run.id, "esign", { status: "warn", result: vId ? "No signatories" : "No version" });
+          }
+        } catch (err: any) {
+          patchStep(run.id, "esign", { status: "fail", result: extractApiError(err) });
+        }
+      }
 
       // Step 4: Approvals
       patchStep(run.id, "approvals", { status: "running" });
@@ -1718,6 +1829,47 @@ export default function BulkTestCreatorPage() {
           )
         } : r
       ));
+    }
+  }
+
+  async function handleESignTest(run: TestRun) {
+    if (!clients || !run.requestId) return;
+    const toastId = toast.loading(`Submitting signature for REQ-${run.requestId}...`);
+    try {
+      const detail = await getContractDetail(clients.newCloud, tenant, run.requestId);
+      const vId = run.generatedVersionId;
+      const sigs = run.esignSignatories ?? (signatories.length > 0 ? signatories : []); 
+
+      if (!vId) throw new Error("No document version identified to sign");
+      if (!sigs || sigs.length === 0) throw new Error("No signatories configured");
+
+      await sendESignRequest(clients.oldProd, tenant, {
+        RequestId: run.requestId,
+        ContractId: Number(detail.id),
+        ContractVersionId: vId,
+        RequestorUsername: username,
+        Recipients: sigs.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order })),
+        Subject: run.esignSubject,
+        Message: run.esignMessage,
+        SupportingDocumentIds: String(vId),
+        documentOrder: [{ Id: vId, Type: "Contract" }]
+      });
+      
+      toast.success("Signature Request Submitted", { id: toastId });
+      
+      try {
+        const esRes = await getESignStatus(clients.oldProd, tenant, {
+          contractId: Number(detail.id),
+          requestId: run.requestId,
+          requestorUsername: username
+        });
+        patchRun(run.id, { esignStatus: esRes });
+      } catch (e) {
+        console.warn("Status fetch failed", e);
+      }
+      
+    } catch (e: any) {
+      toast.error(extractApiError(e), { id: toastId });
     }
   }
 
@@ -1893,6 +2045,83 @@ export default function BulkTestCreatorPage() {
                   <option value="">None</option>
                   {liveParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+              </div>
+
+              {/* Electronic Signature Configuration */}
+              <div className="pt-2 border-t border-border/50 space-y-3">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                     <Users size={12} className="text-purple-400" />
+                     <span className="text-[11px] font-semibold text-purple-400 uppercase tracking-wider">E-Signature</span>
+                   </div>
+                   <button 
+                     onClick={() => setIncludeSignature(!includeSignature)}
+                     className={cn(
+                       "w-8 h-4 rounded-full relative transition-colors duration-200",
+                       includeSignature ? "bg-purple-500" : "bg-muted-foreground/30"
+                     )}
+                   >
+                     <div className={cn(
+                       "absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all duration-200",
+                       includeSignature ? "left-4.5" : "left-0.5"
+                     )} />
+                   </button>
+                </div>
+
+                {includeSignature && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">Email Subject</Label>
+                      <Input 
+                        value={esignSubject} 
+                        onChange={e => setEsignSubject(e.target.value)}
+                        placeholder="Enter subject..."
+                        className="h-8 text-[11px] bg-background/50 border-purple-500/20 focus-visible:ring-purple-500/30"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">Email Message (HTML)</Label>
+                      <textarea 
+                        value={esignMessage}
+                        onChange={e => setEsignMessage(e.target.value)}
+                        className="w-full min-h-[80px] rounded-md border border-purple-500/20 bg-background/50 px-3 py-2 text-[11px] ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus:ring-1 focus:ring-purple-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder="Enter HTML message..."
+                      />
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <Label className="text-[10px] text-muted-foreground uppercase block">Signatories</Label>
+                    </div>
+                    {signatories.map((s, idx) => (
+                      <div key={idx} className="space-y-1.5 p-2 bg-muted/20 border border-border/50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-black text-purple-400 uppercase tracking-widest">Signer {idx + 1}</span>
+                        </div>
+                        <Input 
+                          placeholder="Full Name" 
+                          value={s.name} 
+                          onChange={e => {
+                            const next = [...signatories];
+                            next[idx].name = e.target.value;
+                            setSignatories(next);
+                          }}
+                          className="h-7 text-[10px] bg-background border-border/50"
+                        />
+                        <Input 
+                          placeholder="Email Address" 
+                          value={s.email} 
+                          onChange={e => {
+                            const next = [...signatories];
+                            next[idx].email = e.target.value;
+                            setSignatories(next);
+                          }}
+                          className="h-7 text-[10px] bg-background border-border/50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Run count + prepare */}
@@ -2143,6 +2372,7 @@ export default function BulkTestCreatorPage() {
               onViewContract={() => run.requestId && setViewContractId(run.requestId)}
               onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
               onPreviewVersion={(versionId, fileName) => setPreviewVersion({ versionId, fileName })}
+              onESignTest={() => handleESignTest(run)}
             />
           ))}
         </div>
