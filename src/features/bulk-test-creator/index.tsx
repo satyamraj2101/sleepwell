@@ -16,9 +16,10 @@ import { QK, cn } from "@/lib/utils";
 import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, getQuestionnaire, submitQuestionnaire } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
 import { getSnapshotApprovals } from "@/api/approval";
-import { listUsers } from "@/api/users";
+import { listUsers, fetchAllUsers, listRoles } from "@/api/users";
 import { listFieldDefinitions } from "@/api/metadata";
 import { getESignStatus, sendESignRequest } from "@/api/esign";
+import { listDepartments, listCountries, listCurrencies } from "@/api/departments";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
 import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef, ESignRecipient } from "@/types";
 
@@ -478,10 +479,28 @@ function FilePreviewDialog({
 
 // ─── Small UI Components ──────────────────────────────────────────────────────
 
-function IntakeFieldInput({ field, value, onChange }: { field: FlatField; value: string; onChange: (v: string) => void }) {
+interface LookupRecords {
+  users: Array<{ id: number; name: string }>;
+  departments: Array<{ id: number; name: string }>;
+  countries: Array<{ id: number; name: string }>;
+  currencies: Array<{ id: number; name: string }>;
+  roles: Array<{ id: number; name: string }>;
+  classifications: Array<{ id: number; name: string }>;
+}
+
+function IntakeFieldInput({ 
+  field, value, onChange, lookups 
+}: { 
+  field: FlatField; value: string; onChange: (v: string) => void; 
+  lookups?: LookupRecords 
+}) {
   const ft = (field.fieldType ?? "").toLowerCase().replace(/\s/g, "");
+  const fname = (field.fieldName ?? "").toLowerCase();
+  const dname = (field.displayName ?? "").toLowerCase();
+  
   const cls = "w-full h-8 text-xs bg-background border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring transition-colors";
 
+  // 1. Existing options
   if (field.selectOptions && Object.keys(field.selectOptions).length > 0) {
     return (
       <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
@@ -498,6 +517,47 @@ function IntakeFieldInput({ field, value, onChange }: { field: FlatField; value:
       </select>
     );
   }
+
+  // 2. Lookup redirection based on field name/display name
+  if (lookups) {
+    let options: Array<{ id: number; name: string }> | null = null;
+    
+    const isUser = /user|assignee|requester|requestor|collaborator/.test(fname) || /user|assignee|requester|requestor|collaborator/.test(dname);
+    const isDept = /department|dept/.test(fname) || /department|dept/.test(dname);
+    const isCountry = /country|nation/.test(fname) || /country|nation/.test(dname);
+    const isCurrency = /currency/.test(fname) || /currency/.test(dname);
+    const isRole = /role/.test(fname) || /role/.test(dname);
+    const isClass = /classification/.test(fname) || /classification/.test(dname);
+    const isPriority = /priority/.test(fname) || /priority/.test(dname);
+
+    if (isUser) options = lookups.users;
+    else if (isDept) options = lookups.departments;
+    else if (isCountry) options = lookups.countries;
+    else if (isCurrency) options = lookups.currencies;
+    else if (isRole) options = lookups.roles;
+    else if (isClass) options = lookups.classifications;
+    else if (isPriority) {
+      return (
+        <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
+          <option value="">— select —</option>
+          <option value="1">High</option>
+          <option value="2">Medium</option>
+          <option value="3">Low</option>
+        </select>
+      );
+    }
+
+    if (options && options.length > 0) {
+      return (
+        <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
+          <option value="">— select —</option>
+          {options.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+        </select>
+      );
+    }
+  }
+
+  // 3. Fallbacks
   if (ft === "date") return <input type="date" value={value} onChange={e => onChange(e.target.value)} className={cls} />;
   if (ft === "number" || ft === "currency" || ft === "percentage") return <input type="number" value={value} onChange={e => onChange(e.target.value)} className={cls} />;
   if (ft === "multilinetext" || ft === "textarea") return <textarea value={value} onChange={e => onChange(e.target.value)} rows={2} className={cls + " h-auto py-1.5 resize-none"} />;
@@ -513,7 +573,7 @@ function RunCard({
   onRun, onDelete, onToggleEdit,
   onFieldChange, onClientChange, onPartyChange,
   onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, onESignTest, isRunningAll,
-  newCloudApi,
+  newCloudApi, lookups
 }: {
   run: TestRun;
   allFields: FlatField[];
@@ -533,6 +593,7 @@ function RunCard({
   onESignTest: () => void;
   isRunningAll: boolean;
   newCloudApi: string;
+  lookups?: LookupRecords;
 }) {
   const { tenant, token } = useAuthStore();
   const isRun = run.status === "running";
@@ -1048,7 +1109,10 @@ function RunCard({
                       <div key={id} className="space-y-2 group/field">
                         <div className="flex items-center justify-between gap-2">
                            <div className="flex items-center gap-1.5 min-w-0">
-                             <span className="text-[11px] font-bold text-foreground/70 truncate">{f.displayName || f.fieldName}</span>
+                             <span className="text-[11px] font-bold text-foreground/70 truncate">
+                               {f.displayName || f.fieldName} 
+                               <span className="text-muted-foreground/30 font-mono text-[9px] ml-1">({f.fieldName})</span>
+                             </span>
                              {f.isRequired && <span className="text-red-500/60 font-black text-[10px]">*</span>}
                            </div>
                            <span className="text-[8px] font-black text-muted-foreground/30 uppercase tracking-tighter bg-white/5 px-1.5 py-0.5 rounded border border-white/5 opacity-0 group-hover/field:opacity-100 transition-opacity">{f.fieldType}</span>
@@ -1058,6 +1122,7 @@ function RunCard({
                             field={f}
                             value={run.fieldValues[id] ?? ""}
                             onChange={v => onFieldChange(id, v)}
+                            lookups={lookups}
                           />
                         </div>
                       </div>
@@ -1287,6 +1352,56 @@ export default function BulkTestCreatorPage() {
     enabled: !!clients && !!selAppTypeId,
     staleTime: 5 * 60_000,
   });
+
+  // Expanded Lookups
+  const { data: fetchUsers = [] } = useQuery({
+    queryKey: ["lookupUsers", tenant],
+    queryFn: () => fetchAllUsers(clients!.oldProd, tenant, username),
+    enabled: !!clients && !!tenant,
+    staleTime: 20 * 60_000,
+  });
+
+  const { data: fetchDepts = [] } = useQuery({
+    queryKey: ["lookupDepts", tenant],
+    queryFn: async () => {
+      const res = await listDepartments(clients!.newCloud, tenant);
+      return res.data;
+    },
+    enabled: !!clients && !!tenant,
+  });
+
+  const { data: fetchCountries = [] } = useQuery({
+    queryKey: ["lookupCountries", tenant],
+    queryFn: () => listCountries(clients!.newCloud, tenant),
+    enabled: !!clients && !!tenant,
+  });
+
+  const { data: fetchCurrencies = [] } = useQuery({
+    queryKey: ["lookupCurrencies", tenant],
+    queryFn: () => listCurrencies(clients!.oldProd, tenant),
+    enabled: !!clients && !!tenant,
+  });
+
+  const { data: fetchRoles = [] } = useQuery({
+    queryKey: ["lookupRoles", tenant],
+    queryFn: () => listRoles(clients!.oldProd, tenant, username),
+    enabled: !!clients && !!tenant,
+  });
+
+  const { data: fetchClassifications = [] } = useQuery({
+    queryKey: ["lookupClassifications", tenant],
+    queryFn: () => listRecordClassifications(clients!.newCloud, tenant),
+    enabled: !!clients && !!tenant,
+  });
+
+  const lookups: LookupRecords = useMemo(() => ({
+    users: fetchUsers.map(u => ({ id: u.userId, name: u.fullName || u.userName })),
+    departments: fetchDepts.map(d => ({ id: d.departmentId, name: d.departmentName })),
+    countries: fetchCountries.map(c => ({ id: c.countryId, name: c.countryName })),
+    currencies: fetchCurrencies.map(c => ({ id: c.currencyId, name: c.currencyName || c.currencyCode })),
+    roles: fetchRoles.map(r => ({ id: r.roleId, name: r.roleName })),
+    classifications: fetchClassifications,
+  }), [fetchUsers, fetchDepts, fetchCountries, fetchCurrencies, fetchRoles, fetchClassifications]);
 
   const drawerIntakeMap = useMemo(() => {
     const map: Record<number, IntakeFormField> = {};
@@ -2518,6 +2633,7 @@ export default function BulkTestCreatorPage() {
               onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
               onPreviewVersion={(versionId, fileName) => setPreviewVersion({ versionId, fileName })}
               onESignTest={() => handleESignTest(run)}
+              lookups={lookups}
             />
           ))}
         </div>
