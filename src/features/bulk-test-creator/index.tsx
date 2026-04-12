@@ -504,27 +504,7 @@ function IntakeFieldInput({ field, value, onChange }: { field: FlatField; value:
   return <input type="text" value={value} onChange={e => onChange(e.target.value)} className={cls} />;
 }
 
-function StepPill({ step }: { step: TestStep }) {
-  const s = step.status;
-  return (
-    <div className={cn(
-      "flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-medium transition-all",
-      s === "pass" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
-      s === "fail" ? "bg-red-500/10 border-red-500/20 text-red-400" :
-      s === "warn" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
-      s === "running" ? "bg-blue-500/10 border-blue-500/20 text-blue-400" :
-      "bg-muted/30 border-border text-muted-foreground/50"
-    )} title={step.result}>
-      {s === "pass" ? <CheckCircle2 size={10} /> :
-       s === "fail" ? <XCircle size={10} /> :
-       s === "warn" ? <AlertTriangle size={10} /> :
-       s === "running" ? <Loader2 size={10} className="animate-spin" /> :
-       <Clock size={10} />}
-      <span className="truncate max-w-[80px]">{step.label}</span>
-      {step.durationMs && <span className="text-[9px] opacity-50">{step.durationMs}ms</span>}
-    </div>
-  );
-}
+
 
 // ─── Run Card ─────────────────────────────────────────────────────────────────
 
@@ -757,7 +737,6 @@ function RunCard({
           <div className="absolute left-6 right-6 h-0.5 bg-white/5 top-1/2 -translate-y-1/2" />
           
           {run.steps.map((s, idx) => {
-            const isActive = s.status === "running";
             const isDoneStep = s.status === "pass" || s.status === "warn" || s.status === "fail";
             const color = s.status === "pass" ? "emerald" : s.status === "fail" ? "red" : s.status === "warn" ? "amber" : s.status === "running" ? "blue" : "muted";
 
@@ -1923,7 +1902,7 @@ export default function BulkTestCreatorPage() {
         ContractId: Number(detail.id),
         ContractVersionId: vId,
         RequestorUsername: username,
-        Recipients: sigs.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order })),
+        Recipients: sigs.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order || 1 })),
         Subject: run.esignSubject,
         Message: run.esignMessage,
         SupportingDocumentIds: String(vId),
