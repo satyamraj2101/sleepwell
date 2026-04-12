@@ -1793,7 +1793,7 @@ export default function BulkTestCreatorPage() {
               ContractId: Number(detail.id),
               ContractVersionId: vId,
               RequestorUsername: username,
-              Recipients: signatories.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order })),
+              Recipients: signatories.map(s => ({ Name: s.name, EmailId: s.email, Order: s.order || 1 })),
               Subject: latestRun.esignSubject,
               Message: latestRun.esignMessage,
               SupportingDocumentIds: String(vId),
