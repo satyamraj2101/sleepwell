@@ -5,7 +5,7 @@ import {
   FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download, Import,
   XCircle, Loader2, Plus, Edit2, X, Search, Clock,
   Copy, ExternalLink, CheckSquare, Square, AlertTriangle, RotateCcw, Eye,
-  FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp,
+  FileText, Users, Shield, GitBranch, ChevronDown, ChevronUp, Settings as SettingsIcon, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -95,6 +95,13 @@ interface TestRun {
   esignSubject?: string;
   esignMessage?: string;
   esignStatus?: any; // ESignStatusResponse
+}
+
+interface RecentPreset {
+  id: string;
+  label: string;
+  ids: number[];
+  timestamp: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -583,153 +590,157 @@ function RunCard({
 
   return (
     <div className={cn(
-      "border rounded-xl bg-card overflow-hidden transition-all duration-200",
-      isDone ? "border-emerald-500/30" :
-      isErr ? "border-red-500/30" :
-      isRun ? "border-blue-500/40 ring-1 ring-blue-500/20" :
-      "border-border"
+      "glass-panel rounded-2xl overflow-hidden transition-all duration-500 animate-in fade-in zoom-in-95 leading-relaxed group",
+      isDone ? "border-emerald-500/20 shadow-lg shadow-emerald-500/5 bg-emerald-500/[0.02]" :
+      isErr ? "border-red-500/20 shadow-lg shadow-red-500/5 bg-red-500/[0.02]" :
+      isRun ? "border-blue-500/30 shadow-2xl shadow-blue-500/10 bg-blue-500/[0.04] ring-1 ring-blue-500/10" :
+      "border-white/5 bg-card/10 hover:border-white/10"
     )}>
 
       {/* ── Header ── */}
-      <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+      <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 bg-white/[0.01] border-b border-white/[0.03]">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
           <div className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold",
-            isDone ? "bg-emerald-500/10 text-emerald-500" :
-            isErr ? "bg-red-500/10 text-red-500" :
-            isRun ? "bg-blue-500/10 text-blue-500" :
-            "bg-muted text-muted-foreground"
+            "status-ring w-10 h-10 flex-shrink-0 text-sm font-black shadow-lg",
+            isDone ? "status-ring-done text-emerald-500 bg-emerald-500/10" :
+            isErr ? "status-ring-error text-red-500 bg-red-500/10" :
+            isRun ? "status-ring-running text-blue-500 bg-blue-500/10" :
+            "text-muted-foreground/60 bg-white/5"
           )}>
-            {isDone ? <CheckCircle2 size={16} /> : isErr ? <AlertCircle size={16} /> :
-             isRun ? <Loader2 size={14} className="animate-spin" /> : run.index}
+            {isDone ? <CheckCircle2 size={18} /> : isErr ? <AlertCircle size={18} /> :
+             isRun ? <Loader2 size={18} className="animate-spin" /> : <span className="text-xs">{run.index}</span>}
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold whitespace-nowrap">Run #{run.index}</span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-lg font-black tracking-tight text-foreground/90">Run #{run.index}</span>
               {run.requestId && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-mono bg-muted border border-border px-2 py-0.5 rounded shadow-sm">
-                  <span className="text-blue-400 font-bold">REQ-{run.requestId}</span>
+                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/5 shadow-inner">
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-md tracking-widest border border-blue-500/10">REQ-{run.requestId}</span>
                   {run.recordId && (
-                    <span className="text-emerald-400/80 border-l border-border pl-1.5 ml-0.5" title="Leah Record ID">
-                      REC-{run.recordId}
-                    </span>
+                    <span className="text-[10px] uppercase font-black px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-md tracking-widest border border-emerald-500/10">REC-{run.recordId}</span>
                   )}
-                  <div className="flex items-center gap-1 ml-1 border-l border-border pl-1.5">
-                    <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("Request ID Copied"); }} className="hover:text-foreground text-muted-foreground transition-colors" title="Copy Request ID"><Copy size={9} /></button>
-                    <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 transition-colors" title="Open in Leah"><ExternalLink size={9} /></a>
+                  <div className="flex items-center gap-2 px-2 border-l border-white/10 ml-1">
+                    <button onClick={() => { navigator.clipboard.writeText(String(run.requestId)); toast.success("ID Copied"); }} className="text-muted-foreground hover:text-white transition-colors" title="Copy ID"><Copy size={11} /></button>
+                    <a href={`https://${cloudInstance}/${tenant ? (tenant.charAt(0).toUpperCase() + tenant.slice(1)) : ""}/#/contract-snapshot/${run.requestId}`} target="_blank" rel="noreferrer" className="text-blue-400/80 hover:text-blue-300 transition-colors" title="Open Dashboard"><ExternalLink size={11} /></a>
                   </div>
-                </span>
+                </div>
               )}
               {run.currentStage && (
                 <span className={cn(
-                  "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border",
-                  run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                  "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] border shadow-sm",
+                  run.currentStage.toLowerCase().includes("complete") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                   run.currentStage.toLowerCase().includes("negotiat") ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                   run.currentStage.toLowerCase().includes("approv") ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
                   "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
                 )}>
-                  <GitBranch size={8} className="inline mr-0.5" />{run.currentStage}
+                  {run.currentStage}
                 </span>
               )}
             </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5">
-              <span>{run.appTypeName}</span>
+            <div className="text-[10px] font-black text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2">
+              <span className="flex items-center gap-1 uppercase tracking-widest"><Layers size={10} /> {run.appTypeName}</span>
               {(run.templateName || run.selectedTemplateName) && (
-                <span className="text-amber-400/70 truncate max-w-[120px]">· {run.selectedTemplateName || run.templateName}</span>
+                <span className="text-amber-400/60 truncate max-w-[150px] flex items-center gap-1">
+                  <div className="w-1 h-1 rounded-full bg-white/10" />
+                  <FileText size={10} /> {run.selectedTemplateName || run.templateName}
+                </span>
               )}
             </div>
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
-          <div className="flex items-center gap-1.5 h-7">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap sm:flex-shrink-0">
+          <div className="flex items-center gap-1.5 h-8 bg-black/20 p-1 rounded-xl border border-white/5 shadow-inner">
             {hasDetails && (
               <button
                 onClick={() => setDetailsOpen(o => !o)}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
                 title={detailsOpen ? "Collapse details" : "Expand details"}
               >
-                {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {detailsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             )}
-            <Button size="sm" variant="outline" className="h-7 gap-1 text-[11px] px-2" onClick={onToggleEdit}>
-              <Edit2 size={11} /> {run.editOpen ? "Close" : "Edit"}
+            <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-[11px] font-bold px-3 rounded-lg hover:bg-white/10" onClick={onToggleEdit}>
+              <Edit2 size={12} className={cn("transition-transform", run.editOpen && "rotate-12")} /> {run.editOpen ? "Close" : "Edit"}
             </Button>
           </div>
 
-          <div className="flex items-center gap-1.5 h-7">
+          <div className="flex items-center gap-2 h-8">
             {run.requestId && isDone && (
               <Button 
                 size="sm" variant="outline" 
-                className="h-7 gap-1 text-[11px] px-2 text-blue-400 border-blue-500/30 hover:bg-blue-500/10" 
+                className="h-8 gap-1.5 text-[11px] font-bold px-3 text-blue-400 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-500/40 rounded-xl transition-all shadow-sm" 
                 onClick={onViewContract}
               >
-                <Eye size={11} /> View
+                <Eye size={12} /> View
               </Button>
             )}
             {isDone && (
               <Button 
                 size="sm" variant="outline" 
-                className="h-7 gap-1 text-[11px] px-2 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 disabled:opacity-30" 
+                className="h-8 gap-1.5 text-[11px] font-bold px-3 text-emerald-400 border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40 rounded-xl transition-all shadow-sm disabled:opacity-30" 
                 onClick={onPreviewDoc} 
                 disabled={!run.generatedVersionId}
               >
-                <FileText size={11} /> Preview
+                <FileText size={12} /> Preview
               </Button>
             )}
           </div>
 
           {!isRunningAll && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                className={cn("h-7 gap-1 text-[11px] px-3", isDone || isErr ? "bg-muted hover:bg-muted/80 text-foreground border border-border" : "bg-amber-500 hover:bg-amber-600 text-black font-semibold shadow-sm")}
+                className={cn(
+                  "h-8 gap-2 text-[11px] font-black uppercase tracking-widest px-4 rounded-xl transition-all shadow-lg active:scale-95", 
+                  isDone || isErr ? "bg-white/5 hover:bg-white/10 text-foreground border border-white/10" : "bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/20"
+                )}
                 variant={isDone || isErr ? "outline" : "default"}
                 onClick={onRun} disabled={isRun}
               >
-                {isRun ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-                {run.requestId ? "Rerun" : "Run"}
+                {isRun ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} className={cn(isDone || isErr ? "" : "animate-pulse-subtle")} />}
+                {run.requestId ? "Rerun" : "Run Test"}
               </Button>
               
               {run.requestId && isDone && (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 gap-1 text-[11px] px-2 text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+                  className="h-8 gap-2 text-[11px] font-black uppercase tracking-widest px-4 text-purple-400 border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 hover:border-purple-500/40 rounded-xl transition-all shadow-md shadow-purple-500/5"
                   onClick={onESignTest}
                   disabled={isRun}
                   title="Manual Signature Request"
                 >
-                  <Users size={11} /> Sign Test
+                  <Users size={12} /> Sign
                 </Button>
               )}
             </div>
           )}
-          <button onClick={onDelete} className="p-1.5 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors ml-auto sm:ml-0">
-            <Trash2 size={13} />
+          <button onClick={onDelete} className="p-2 rounded-xl text-muted-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-all ml-auto">
+            <Trash2 size={14} />
           </button>
         </div>
       </div>
 
       {/* Available Actions Section */}
       {run.availableActions && run.availableActions.length > 0 && (
-        <div className="px-4 pb-3 pt-1 border-t border-border/40">
-          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-            <Shield size={11} className="text-blue-400" /> Available Actions
+        <div className="px-5 pb-4 pt-1 border-t border-white/[0.03]">
+          <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+            <Shield size={10} className="text-blue-500/50" /> System Commands
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {run.availableActions.map((action, i) => (
               <span 
                 key={i} 
                 className={cn(
-                  "px-2 py-0.5 rounded text-[10px] border transition-all",
+                  "px-3 py-1 rounded-lg text-[10px] font-bold border transition-all duration-300 cursor-default",
                   action.code === "Legal Review" || action.code.includes("Review")
-                    ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                    ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-sm shadow-blue-500/5"
                     : action.code.includes("Version")
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                    : "bg-muted/50 text-muted-foreground border-border"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-sm shadow-emerald-500/5"
+                    : "bg-white/5 text-muted-foreground/70 border-white/5 hover:bg-white/10"
                 )}
               >
                 {action.displayText || action.workflowCommandName || action.code}
@@ -739,9 +750,57 @@ function RunCard({
         </div>
       )}
 
-      {/* ── Step pills ── */}
-      <div className="px-4 pb-3 flex gap-1.5 flex-wrap border-t border-border/30 pt-3">
-        {run.steps.map(s => <StepPill key={s.id} step={s} />)}
+      {/* ── Execution Timeline ── */}
+      <div className="px-5 py-5 border-t border-white/[0.03] bg-black/10">
+        <div className="relative flex items-center justify-between gap-1">
+          {/* Connecting Line Backdrop */}
+          <div className="absolute left-6 right-6 h-0.5 bg-white/5 top-1/2 -translate-y-1/2" />
+          
+          {run.steps.map((s, idx) => {
+            const isActive = s.status === "running";
+            const isDoneStep = s.status === "pass" || s.status === "warn" || s.status === "fail";
+            const color = s.status === "pass" ? "emerald" : s.status === "fail" ? "red" : s.status === "warn" ? "amber" : s.status === "running" ? "blue" : "muted";
+
+            return (
+              <div key={s.id} className="relative z-10 flex flex-col items-center group/step flex-1">
+                {/* Connector line (inside item) */}
+                {idx < run.steps.length - 1 && (
+                   <div className={cn(
+                     "absolute left-1/2 w-full h-0.5 top-1/2 -translate-y-1/2 transition-colors duration-500",
+                     isDoneStep ? `bg-${color}-500/30` : "bg-transparent"
+                   )} />
+                )}
+                
+                {/* Node */}
+                <div className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md",
+                  s.status === "pass" ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" :
+                  s.status === "fail" ? "bg-red-500/20 border-red-500 text-red-400" :
+                  s.status === "warn" ? "bg-amber-500/20 border-amber-500 text-amber-400" :
+                  s.status === "running" ? "bg-blue-500/20 border-blue-500 text-blue-400 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.3)]" :
+                  "bg-white/5 border-white/10 text-white/20"
+                )}>
+                  {s.status === "pass" ? <CheckCircle2 size={12} /> : 
+                   s.status === "fail" ? <XCircle size={12} /> :
+                   s.status === "warn" ? <AlertTriangle size={12} /> :
+                   s.status === "running" ? <Loader2 size={12} className="animate-spin" /> : 
+                   <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                </div>
+
+                {/* Info Tooltip-like label */}
+                <div className="absolute top-8 flex flex-col items-center gap-0.5 opacity-60 group-hover/step:opacity-100 transition-opacity whitespace-nowrap">
+                   <span className={cn(
+                     "text-[9px] font-black uppercase tracking-tighter",
+                     s.status === "running" ? "text-blue-400" : "text-muted-foreground"
+                   )}>{s.label}</span>
+                   {s.durationMs && <span className="text-[8px] font-mono opacity-50">{s.durationMs}ms</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Spacer for the labels below */}
+        <div className="h-8" />
       </div>
 
       {/* ── Error banner ── */}
@@ -762,73 +821,54 @@ function RunCard({
 
           {/* Versions section */}
           {(run.versions?.length ?? 0) > 0 && (
-            <div className="px-4 py-3 border-b border-border/20">
-              <div className="flex items-center gap-1.5 mb-2">
-                <FileText size={11} className="text-emerald-400" />
-                <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
-                  Versions ({run.versions!.length})
+            <div className="px-5 py-4 border-b border-white/[0.03]">
+              <div className="flex items-center gap-2 mb-3">
+                <FileText size={12} className="text-emerald-400" />
+                <span className="text-label !text-emerald-400/80">
+                  Document Versions ({run.versions!.length})
                 </span>
               </div>
-              <div className="space-y-1.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {run.versions!.map((v) => (
                   <div key={v.versionId} className={cn(
-                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all hover:bg-white/[0.02]",
                     v.versionId === run.generatedVersionId
-                      ? "bg-emerald-500/8 border-emerald-500/20"
-                      : "bg-muted/20 border-border/50"
+                      ? "bg-emerald-500/[0.05] border-emerald-500/20 shadow-sm"
+                      : "bg-white/[0.01] border-white/5"
                   )}>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] font-medium text-foreground truncate">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[11px] font-black text-foreground/90 truncate max-w-[140px]">
                           {v.fileName || `Version ${v.versionId}`}
                         </span>
                         {v.versionId === run.generatedVersionId && (
-                          <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-semibold uppercase">Active</span>
-                        )}
-                        {v.isGeneratedFromTemplate && (
-                          <span className="text-[8px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">From Template</span>
-                        )}
-                        {v.isLocked && (
-                          <span className="text-[8px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">Locked</span>
+                          <span className="text-[7px] font-black px-1.5 py-0.5 rounded-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase tracking-tighter">Active</span>
                         )}
                       </div>
-                      {v.addedByName && (
-                        <span className="text-[9px] text-muted-foreground">by {v.addedByName}</span>
-                      )}
-                      {/* Collaborators on this version */}
-                      {(v.collaborators?.length ?? 0) > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {v.collaborators!.map((c, ci) => (
-                            <span key={ci} className="inline-flex items-center gap-0.5 text-[9px] px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400" title={c.email || undefined}>
-                              <Users size={7} /> {c.fullName || c.email || `User #${c.userId}`}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {v.addedByName && (
+                          <span className="text-[9px] text-muted-foreground/50 font-medium">by {v.addedByName}</span>
+                        )}
+                        {v.isGeneratedFromTemplate && (
+                          <span className="text-[8px] font-bold text-blue-400/60 uppercase tracking-tighter">· AI Template</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => onPreviewVersion(v.versionId, v.fileName ?? `version-${v.versionId}.pdf`)}
-                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-400 border border-border hover:border-emerald-500/30 transition-all"
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-muted-foreground/60 hover:text-white transition-all border border-white/5"
                         title="Preview"
                       >
-                        <Eye size={9} />
+                        <Eye size={11} />
                       </button>
                       <a
                         href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=1&FromPreviewPage=false&IncludeComments=false&Token=${token}`}
                         target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-400 border border-border hover:border-emerald-500/30 transition-all"
+                        className="p-1.5 rounded-lg bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-500/60 hover:text-emerald-400 transition-all border border-emerald-500/10"
                         title="Download PDF"
                       >
-                        <Download size={9} /> PDF
-                      </a>
-                      <a
-                        href={`https://${newCloudApi}/api/${tenant}/version/${v.versionId}/download?format=0&FromPreviewPage=false&IncludeComments=false&Token=${token}`}
-                        target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-muted/50 hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all"
-                        title="Download DOCX"
-                      >
-                        <Download size={9} /> DOCX
+                        <Download size={11} />
                       </a>
                     </div>
                   </div>
@@ -838,115 +878,115 @@ function RunCard({
           )}
 
           {/* People: Assignees + Approvals + Signatories */}
-          <div className="px-4 py-3 border-b border-border/20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+          <div className="px-5 py-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 border-b border-white/[0.03]">
 
             {/* Assignees */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Users size={11} className="text-indigo-400" />
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Assignees</span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Users size={12} className="text-indigo-400" />
+                <span className="text-label !text-indigo-400/80">Assignees</span>
               </div>
               {(run.contractAssignees?.length ?? 0) > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {run.contractAssignees!.map((a, i) => (
                     <div key={i} className={cn(
-                      "flex items-center justify-between gap-2 px-3 py-1.5 rounded border text-[11px]",
-                      a.isPrimary ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300" : "bg-muted/30 border-border/50 text-muted-foreground"
+                      "flex items-center justify-between gap-3 px-3 py-2 rounded-xl border transition-all text-[11px] font-medium shadow-sm",
+                      a.isPrimary ? "bg-indigo-500/10 border-indigo-500/20 text-indigo-200" : "bg-white/[0.02] border-white/5 text-muted-foreground/80 hover:bg-white/[0.05]"
                     )}>
                       <span className="truncate flex-1">{a.userName || `User #${a.userId}`}</span>
-                      {a.isPrimary && <span className="text-[8px] text-indigo-400 font-bold bg-indigo-500/10 px-1 rounded shadow-sm">PRIMARY</span>}
+                      {a.isPrimary && <span className="text-[8px] font-black text-indigo-400 bg-indigo-500/20 px-2 py-0.5 rounded-full shadow-inner border border-indigo-500/20">PRIMARY</span>}
                     </div>
                   ))}
                 </div>
-              ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
+              ) : <div className="text-[11px] text-muted-foreground/30 italic px-1 font-medium">No assignees found</div>}
             </div>
 
             {/* Approvals */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Shield size={11} className="text-amber-400" />
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Approvals</span>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Shield size={12} className="text-amber-400" />
+                <span className="text-label !text-amber-400/80">Approvals</span>
               </div>
               {(run.approvals?.length ?? 0) > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {run.approvals!.map((a, i) => (
                     <div key={i} className={cn(
-                      "px-3 py-1.5 rounded border text-[11px]",
-                      a.isApproved ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300" :
-                      (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/10 border-red-500/30 text-red-300" :
-                      "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                      "px-3 py-2 rounded-xl border transition-all text-[11px] shadow-sm",
+                      a.isApproved ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-200" :
+                      (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/10 border-red-500/20 text-red-200" :
+                      "bg-amber-500/10 border-amber-500/20 text-amber-200"
                     )} title={a.condition || undefined}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-medium flex-1">{a.approverName}</span>
-                        <span className={cn("text-[9px] font-bold px-1.5 rounded-sm shadow-sm",
-                          a.isApproved ? "bg-emerald-500/20 text-emerald-400" :
-                          (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/20 text-red-400" : "bg-amber-500/20 text-amber-400"
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate font-bold flex-1 text-foreground">{a.approverName}</span>
+                        <span className={cn("text-[8px] font-black px-2 py-0.5 rounded-full shadow-inner border",
+                          a.isApproved ? "bg-emerald-500/30 text-emerald-300 border-emerald-500/30" :
+                          (a.status as string).toLowerCase() === "rejected" ? "bg-red-500/30 text-red-300 border-red-500/30" : "bg-amber-500/30 text-amber-300 border-amber-500/30"
                         )}>{(a.statusName || a.status).toUpperCase()}</span>
-                        <div className="text-[10px] opacity-40 truncate mt-0.5">{a.approverRole}</div>
                       </div>
+                      <div className="text-[9px] text-muted-foreground/60 font-mono mt-1 flex items-center gap-1.5 uppercase truncate tracking-tight">{a.approverRole}</div>
                     </div>
                   ))}
                 </div>
-              ) : <div className="text-[11px] text-emerald-400/60 italic px-1">No approvals required</div>}
+              ) : <div className="text-[11px] text-muted-foreground/30 italic px-1 font-medium">Workflow bypass allowed</div>}
             </div>
 
-              {/* Signatories (E-Signature status) */}
-              <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
-                <div className="flex items-center gap-1.5">
-                  <Users size={11} className="text-purple-400" />
-                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Signatories</span>
-                </div>
-                {run.esignStatus ? (
-                  <div className="space-y-1">
-                    {run.esignStatus.recipientStatus.map((s: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
-                        <div className="min-w-0 pr-2">
-                          <div className="font-bold truncate">{s.name}</div>
-                          <div className="text-[9px] opacity-60 truncate">{s.email}</div>
-                        </div>
-                        <span className={cn(
-                          "text-[9px] font-bold px-1.5 rounded-sm shadow-sm",
-                          s.status === "Signed" ? "bg-emerald-500/20 text-emerald-400" :
-                          s.status === "Declined" ? "bg-red-500/20 text-red-400" :
-                          "bg-purple-500/20 text-purple-400"
-                        )}>{s.status?.toUpperCase() || "PENDING"}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : allSignatories.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {allSignatories.map((s, i) => (
-                      <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded border border-purple-500/30 bg-purple-500/10 text-[11px] text-purple-300">
-                        <span className="truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
-                        {s.email && <span className="text-[9px] opacity-40 hidden sm:inline">{s.email}</span>}
-                      </div>
-                    ))}
-                  </div>
-                ) : <div className="text-[11px] text-muted-foreground/40 italic px-1">None assigned</div>}
+            {/* Signatories (E-Signature status) */}
+            <div className="space-y-3 md:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2">
+                <Users size={12} className="text-purple-400/60" />
+                <span className="text-[10px] font-black text-purple-400/60 uppercase tracking-[0.1em]">Signatories</span>
               </div>
+              {run.esignStatus ? (
+                <div className="space-y-2">
+                  {run.esignStatus.recipientStatus.map((s: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-purple-500/20 bg-purple-500/[0.05] text-[11px] shadow-sm hover:bg-purple-500/[0.08] transition-all">
+                      <div className="min-w-0 pr-2">
+                        <div className="font-black text-foreground/90 truncate">{s.name}</div>
+                        <div className="text-[9px] text-muted-foreground/60 truncate font-medium">{s.email}</div>
+                      </div>
+                      <span className={cn(
+                        "text-[8px] font-black px-2 py-0.5 rounded-full shadow-inner border border-purple-500/20 whitespace-nowrap",
+                        s.status === "Signed" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/20" :
+                        s.status === "Declined" ? "bg-red-500/20 text-red-400 border-red-500/20" :
+                        "bg-purple-500/20 text-purple-300"
+                      )}>{s.status?.toUpperCase() || "PENDING"}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : allSignatories.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {allSignatories.map((s, i) => (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/5 bg-white/[0.03] text-[10px] font-bold text-muted-foreground/80">
+                      <Users size={10} className="text-purple-400/40" />
+                      <span className="truncate">{s.fullName || s.email || `User #${s.userId}`}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="text-[11px] text-muted-foreground/30 italic px-1 font-medium">None assigned</div>}
+            </div>
           </div>
 
           {/* Context: Clients, Parties, Requester */}
-          <div className="px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border/10">
+          <div className="px-5 py-3 flex flex-wrap items-center gap-x-8 gap-y-3 bg-white/[0.01] border-t border-white/[0.03]">
             {run.requesterName && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">By</span>
-                <span className="text-[10px] text-foreground/70">{run.requesterName}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-label !text-white/40">Created By</span>
+                <span className="text-[11px] font-black text-foreground">{run.requesterName}</span>
               </div>
             )}
             {(run.contractClients?.length ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Clients</span>
-                <div className="flex gap-1">
+              <div className="flex items-center gap-3">
+                <span className="text-label !text-white/40">Clients</span>
+                <div className="flex gap-2">
                   {run.contractClients!.map((c, i) => {
                     const mappedName = liveClients.find(lc => lc.id === c.clientId)?.name;
                     return (
                       <span key={i} className={cn(
-                        "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
-                        c.isPrimary ? "bg-amber-500/10 border-amber-500/25 text-amber-400" : "bg-muted/30 border-border text-muted-foreground"
+                        "inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg border shadow-sm",
+                        c.isPrimary ? "bg-amber-500/10 border-amber-500/20 text-amber-500/80" : "bg-white/5 border-white/5 text-muted-foreground/60"
                       )}>
                         {mappedName || c.clientName || `#${c.clientId}`}
-                        {c.isPrimary && <span className="text-[7px]">★</span>}
+                        {c.isPrimary && <div className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />}
                       </span>
                     );
                   })}
@@ -954,16 +994,16 @@ function RunCard({
               </div>
             )}
             {(run.contractParties?.length ?? 0) > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Parties</span>
-                <div className="flex gap-1">
+              <div className="flex items-center gap-3">
+                <span className="text-label !text-white/40">Parties</span>
+                <div className="flex gap-2">
                   {run.contractParties!.map((p, i) => (
                     <span key={i} className={cn(
-                      "inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border",
-                      p.isPrimary ? "bg-purple-500/10 border-purple-500/25 text-purple-400" : "bg-muted/30 border-border text-muted-foreground"
+                      "inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg border shadow-sm",
+                      p.isPrimary ? "bg-purple-500/10 border-purple-500/20 text-purple-500/80" : "bg-white/5 border-white/5 text-muted-foreground/60"
                     )}>
                       {p.name ?? `#${p.legalPartyId}`}
-                      {p.isPrimary && <span className="text-[7px]">★</span>}
+                      {p.isPrimary && <div className="w-1 h-1 rounded-full bg-purple-500 animate-pulse" />}
                     </span>
                   ))}
                 </div>
@@ -975,57 +1015,66 @@ function RunCard({
 
       {/* ── Inline Edit Form ── */}
       {run.editOpen && (
-        <div className="border-t border-border/50 bg-muted/10">
-          <div className="px-4 py-3 flex items-center justify-between border-b border-border/30">
-            <span className="text-xs font-semibold text-foreground">Edit fields for Run #{run.index}</span>
-            <Button size="sm" className="h-7 gap-1 text-xs" onClick={onSaveAndRerun}>
-              <Play size={11} /> Save & Rerun
+        <div className="border-t border-white/[0.03] bg-black/40 animate-in slide-in-from-top-4 duration-500">
+          <div className="px-5 py-4 flex items-center justify-between border-b border-white/[0.03] bg-white/[0.02]">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-4 bg-primary rounded-full" />
+              <span className="text-xs font-black uppercase tracking-[0.1em] text-foreground/80">Override Parameters: Run #{run.index}</span>
+            </div>
+            <Button size="sm" className="h-8 gap-2 text-[10px] font-black uppercase tracking-widest bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/10" onClick={onSaveAndRerun}>
+              <Play size={12} fill="currentColor" /> Save & Re-Execute
             </Button>
           </div>
-          <div className="px-4 py-3 max-h-96 overflow-y-auto space-y-4">
+          <div className="px-5 py-5 max-h-[500px] overflow-y-auto space-y-6 custom-scrollbar">
 
             {/* Client & Party overrides per run */}
-            <div className="grid grid-cols-2 gap-3 pb-3 border-b border-border/30">
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                  Client <span className="text-red-400">*</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-white/[0.03]">
+              <div className="space-y-2">
+                <label className="text-label block">
+                  Target Client <span className="text-red-400 font-black">*</span>
                 </label>
                 <select
                   value={run.selectedClientId ?? ""}
                   onChange={e => onClientChange(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full h-7 text-xs bg-background border border-border rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-9 text-xs bg-white/5 border border-white/10 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground/80 transition-all hover:bg-white/[0.08]"
                 >
-                  <option value="">None</option>
+                  <option value="">— Use Global —</option>
                   {liveClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Legal Party</label>
+              <div className="space-y-2">
+                <label className="text-label block">Legal Party Overlay</label>
                 <select
                   value={run.selectedPartyId ?? ""}
                   onChange={e => onPartyChange(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full h-7 text-xs bg-background border border-border rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-9 text-xs bg-white/5 border border-white/10 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground/80 transition-all hover:bg-white/[0.08]"
                 >
-                  <option value="">None</option>
+                  <option value="">— Use Global —</option>
                   {liveParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
             </div>
 
             {Object.entries(groupedForEdit).map(([section, sFields]) => (
-              <div key={section}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{section}</p>
-                <div className="space-y-2">
+              <div key={section} className="space-y-4">
+                <div className="flex items-center gap-2">
+                   <div className="h-px flex-1 bg-white/[0.03]" />
+                   <p className="text-[9px] font-black text-muted-foreground/30 uppercase tracking-[0.2em]">{section || "Base Attributes"}</p>
+                   <div className="h-px flex-1 bg-white/[0.03]" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                   {sFields.map(f => {
                     const id = String(f.fieldId);
                     return (
-                      <div key={id} className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1 mb-0.5">
-                            <span className="text-[11px] font-medium truncate">{f.displayName || f.fieldName}</span>
-                            {f.isRequired && <span className="text-red-400 text-[9px]">*</span>}
-                            <span className="text-[9px] text-muted-foreground/40 font-mono">{f.fieldType}</span>
-                          </div>
+                      <div key={id} className="space-y-2 group/field">
+                        <div className="flex items-center justify-between gap-2">
+                           <div className="flex items-center gap-1.5 min-w-0">
+                             <span className="text-[11px] font-bold text-foreground/70 truncate">{f.displayName || f.fieldName}</span>
+                             {f.isRequired && <span className="text-red-500/60 font-black text-[10px]">*</span>}
+                           </div>
+                           <span className="text-[8px] font-black text-muted-foreground/30 uppercase tracking-tighter bg-white/5 px-1.5 py-0.5 rounded border border-white/5 opacity-0 group-hover/field:opacity-100 transition-opacity">{f.fieldType}</span>
+                        </div>
+                        <div className="relative">
                           <IntakeFieldInput
                             field={f}
                             value={run.fieldValues[id] ?? ""}
@@ -1075,6 +1124,32 @@ export default function BulkTestCreatorPage() {
   ]);
   const [esignSubject, setEsignSubject] = useState("Leah CLM - Signature Request for Contract");
   const [esignMessage, setEsignMessage] = useState("<p>Hello,</p><p>Please review and sign the attached contract.</p><p>Regards,<br/>Leah Automation</p>");
+
+  // Recent Presets History
+  const [recentPresets, setRecentPresets] = useState<RecentPreset[]>(() => {
+    try {
+      const saved = localStorage.getItem(`btc-presets-${tenant}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`btc-presets-${tenant}`, JSON.stringify(recentPresets));
+  }, [recentPresets, tenant]);
+
+  const saveBatchAsPreset = useCallback((ids: number[]) => {
+    if (ids.length === 0) return;
+    setRecentPresets(prev => {
+      const newPreset: RecentPreset = {
+        id: Math.random().toString(36).slice(2, 9),
+        label: new Date().toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+        ids: [...new Set(ids)], // Dedupe
+        timestamp: Date.now(),
+      };
+      return [newPreset, ...prev].slice(0, 15); // Keep last 15
+    });
+  }, []);
+
 
   // ── localStorage keys for custom mode persistence ──────────────────────────
   const lsSelKey  = selAppTypeId ? `btc-custom-sel-${tenant}-${selAppTypeId}` : null;
@@ -1877,11 +1952,27 @@ export default function BulkTestCreatorPage() {
     if (runs.length === 0) return;
     abortRef.current = false;
     setIsRunningAll(true);
+    
+    const capturedIds: number[] = [];
+    
     for (const run of runs) {
       if (abortRef.current) break;
       await executeRun(run);
+      // After each run, find the updated requestId from the run reference or results
+      // Since executeRun mutations might not be reflected in our local 'run' object immediately,
+      // we'll rely on the fact that we can track it.
       await new Promise(r => setTimeout(r, 400));
     }
+    
+    // Get the very latest IDs from the current state to be safe
+    setRuns(currentRuns => {
+      const ids = currentRuns.map(r => r.requestId).filter(Boolean) as number[];
+      if (ids.length > 0) {
+        saveBatchAsPreset(ids);
+      }
+      return currentRuns;
+    });
+
     setIsRunningAll(false);
     toast.success("All runs complete");
   }
@@ -1904,50 +1995,61 @@ export default function BulkTestCreatorPage() {
 
   return (
     <>
-    <div className="space-y-4">
-      <PageHeader
-        title="Bulk Test Creator"
-        description="Create multiple contract requests with configurable field values and track results."
-        actions={
-          <div className="flex items-center gap-2">
+    <div className="space-y-6 animate-fade-in">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 via-background to-background border border-white/5 p-6 mb-4 shadow-xl">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-primary/10 blur-[100px] rounded-full -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-500/5 blur-[80px] rounded-full translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-black tracking-tighter text-foreground bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">Bulk Test Creator</h1>
+            <p className="text-xs text-muted-foreground/60 max-w-xl leading-relaxed italic font-medium">
+              Orchestrate high-volume contract automation suites with precision data and real-time tracking.
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-3">
             {runs.length > 0 && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => exportCSV(runs)}>
-                <Download size={13} /> Export CSV
+              <Button variant="outline" size="lg" className="h-12 px-6 gap-2 rounded-2xl bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 transition-all font-bold text-xs uppercase tracking-widest shadow-xl" onClick={() => exportCSV(runs)}>
+                <Download size={16} /> Export Data
               </Button>
             )}
             {runs.length > 0 && !isRunningAll && (
-              <Button size="sm" className="gap-1.5" onClick={executeAll}>
-                <Play size={13} /> Run All ({runs.length})
+              <Button size="lg" className="h-12 px-8 gap-2 rounded-2xl bg-primary hover:bg-primary/80 text-white font-black text-xs uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(59,130,246,0.3)] hover:shadow-[0_0_40px_rgba(59,130,246,0.4)] transition-all active:scale-95" onClick={executeAll}>
+                <Play size={16} fill="currentColor" /> Run Suite ({runs.length})
               </Button>
             )}
             {isRunningAll && (
-              <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => abortRef.current = true}>
-                <XCircle size={13} /> Abort
+              <Button size="lg" variant="destructive" className="h-12 px-8 gap-2 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all" onClick={() => abortRef.current = true}>
+                <XCircle size={16} /> Abort Mission
               </Button>
             )}
           </div>
-        }
-      />
+        </div>
+      </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
 
         {/* ── LEFT SIDEBAR ── */}
-        <div className="w-full lg:w-[320px] lg:flex-shrink-0 space-y-3 lg:sticky lg:top-4">
+        <div className="w-full lg:w-[320px] lg:flex-shrink-0 space-y-4 lg:sticky lg:top-4">
 
           {/* Setup card */}
-          <div className="border border-border rounded-xl bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/20">
-              <h3 className="text-sm font-semibold">Setup</h3>
-              {currentUser && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Running as <span className="text-foreground font-medium">{currentUser.fullName}</span> · #{currentUser.userId}
-                </p>
-              )}
+          <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 bg-card/30">
+            <div className="px-4 py-3 border-b border-white/5 bg-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold tracking-tight">Configuration</h3>
+                {currentUser && (
+                  <p className="text-[10px] font-black uppercase text-muted-foreground/80 mt-1 tracking-wider">
+                    As <span className="text-foreground font-black">{currentUser.fullName}</span>
+                  </p>
+                )}
+              </div>
+              <SettingsIcon size={14} className="text-muted-foreground/40" />
             </div>
             <div className="p-4 space-y-3">
               {/* App type */}
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Application Type</label>
+                <label className="text-label block mb-2">Application Type</label>
                 <select
                   value={selAppTypeId ?? ""}
                   onChange={e => { setSelAppTypeId(e.target.value ? Number(e.target.value) : null); setSelTemplateId(null); setRuns([]); }}
@@ -1963,7 +2065,7 @@ export default function BulkTestCreatorPage() {
               {/* Template — smart selection */}
               {selAppTypeId && (
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                  <label className="text-label block mb-2">
                     Template
                     {!templatesLoading && templates.length === 1 && (
                       <span className="ml-1.5 normal-case font-normal text-emerald-400">(auto-selected)</span>
@@ -2034,7 +2136,7 @@ export default function BulkTestCreatorPage() {
 
               {/* Legal Party (optional) */}
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                <label className="text-label block mb-1.5">
                   Legal Party <span className="text-muted-foreground font-normal">(optional)</span>
                 </label>
                 <select
@@ -2071,7 +2173,7 @@ export default function BulkTestCreatorPage() {
                 {includeSignature && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div>
-                      <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">Email Subject</Label>
+                      <Label className="text-label mb-2 block">Email Subject</Label>
                       <Input 
                         value={esignSubject} 
                         onChange={e => setEsignSubject(e.target.value)}
@@ -2081,7 +2183,7 @@ export default function BulkTestCreatorPage() {
                     </div>
                     
                     <div>
-                      <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">Email Message (HTML)</Label>
+                      <Label className="text-label mb-2 block">Email Message (HTML)</Label>
                       <textarea 
                         value={esignMessage}
                         onChange={e => setEsignMessage(e.target.value)}
@@ -2125,15 +2227,15 @@ export default function BulkTestCreatorPage() {
               </div>
 
               {/* Run count + prepare */}
-              <div className="flex gap-2 items-end">
+              <div className="flex gap-2 items-end pt-3 border-t border-white/5">
                 <div className="flex-1">
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Number of Runs</label>
+                  <label className="text-label block mb-2">Runs</label>
                   <Input type="number" min={1} max={50} value={runCount}
                     onChange={e => setRunCount(Math.max(1, Math.min(50, Number(e.target.value))))}
-                    className="h-9 text-sm" />
+                    className="h-9 text-sm bg-white/5 border-white/10" />
                 </div>
                 <Button
-                  className="h-9 gap-1.5 flex-shrink-0"
+                  className="h-9 gap-1.5 flex-shrink-0 bg-primary hover:bg-primary/80 text-white shadow-lg shadow-primary/20"
                   onClick={handlePrepare}
                   disabled={!selAppTypeId || intakeLoading}
                 >
@@ -2145,14 +2247,14 @@ export default function BulkTestCreatorPage() {
           </div>
 
           {/* Bulk Import card */}
-          <div className="border border-border rounded-xl bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Bulk Import IDs</h3>
-              <Import size={12} className="text-muted-foreground" />
+          <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 bg-card/30">
+            <div className="px-4 py-3 border-b border-white/5 bg-white/5 flex items-center justify-between">
+              <h3 className="text-sm font-bold tracking-tight">Bulk Import</h3>
+              <Import size={14} className="text-muted-foreground/40" />
             </div>
             <div className="p-4 space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Request IDs</label>
+                <label className="text-label block mb-2">Request IDs</label>
                 <textarea
                   value={importInput}
                   onChange={e => setImportInput(e.target.value)}
@@ -2165,7 +2267,7 @@ export default function BulkTestCreatorPage() {
               </div>
               <Button
                 variant="outline"
-                className="w-full h-9 gap-1.5 text-xs border-indigo-500/30 hover:bg-indigo-500/10 hover:text-indigo-400 transition-all"
+                className="w-full h-9 gap-1.5 text-xs border-indigo-500/30 hover:bg-indigo-500/20 hover:text-indigo-400 transition-all shadow-lg shadow-indigo-500/10"
                 onClick={handleImport}
                 disabled={isImporting || !importInput.trim()}
               >
@@ -2175,27 +2277,77 @@ export default function BulkTestCreatorPage() {
             </div>
           </div>
 
+          {/* Recent Presets Card */}
+          <div className="glass-panel rounded-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="px-4 py-3 border-b border-white/5 bg-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock size={12} className="text-amber-400" />
+                <h3 className="text-sm font-bold tracking-tight">Recent Sessions</h3>
+              </div>
+              {recentPresets.length > 0 && (
+                <button 
+                  onClick={() => setRecentPresets([])}
+                  className="p-1 hover:bg-white/10 rounded-md text-muted-foreground/60 hover:text-red-400 transition-all font-bold text-[9px] uppercase tracking-widest flex items-center gap-1"
+                  title="Clear history"
+                >
+                  <Trash2 size={10} /> Clear
+                </button>
+              )}
+            </div>
+            <div className="p-2 space-y-1">
+              {recentPresets.length > 0 ? (
+                recentPresets.map(preset => (
+                  <button
+                    key={preset.id}
+                    onClick={() => {
+                      setImportInput(preset.ids.join(", "));
+                      toast.success("Preset loaded to import tool");
+                    }}
+                    className="w-full flex items-center justify-between p-2 rounded-xl text-left hover:bg-white/10 transition-all group border border-transparent hover:border-white/5"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-bold text-foreground/80 group-hover:text-amber-400 transition-colors">{preset.label}</span>
+                      <span className="text-label !text-muted-foreground/40">{preset.ids.length} Requests</span>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Plus size={10} className="text-amber-400" />
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="py-6 px-4 text-center">
+                  <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-2">
+                    <Clock size={14} className="text-muted-foreground/30" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50 font-medium leading-relaxed">
+                    No recent sessions yet.<br/>Runs are saved here automatically.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Fill mode + field selector */}
           {selAppTypeId && (
-            <div className="border border-border rounded-xl bg-card overflow-hidden">
-              <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Field Fill Mode</h3>
+            <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 bg-card/30">
+              <div className="px-4 py-3 border-b border-white/5 bg-white/5 flex items-center justify-between">
+                <h3 className="text-sm font-bold tracking-tight">Auto-Fill Settings</h3>
                 {allFields.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{selectedCount}/{allFields.length} selected</span>
+                  <span className="text-[10px] text-muted-foreground/60 font-medium">{selectedCount}/{allFields.length}</span>
                 )}
               </div>
 
               {/* Mode selector */}
-              <div className="p-3 flex gap-1.5 border-b border-border">
+              <div className="g-2 p-3 flex gap-1.5 border-b border-white/5">
                 {(["mandatory", "all", "custom"] as FillMode[]).map(m => (
                   <button
                     key={m}
                     onClick={() => setFillMode(m)}
                     className={cn(
-                      "flex-1 text-[11px] font-semibold py-1.5 rounded-md border transition-all capitalize",
+                      "flex-1 text-[10px] font-bold py-2 rounded-lg border transition-all capitalize tracking-tight",
                       fillMode === m
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-transparent border-border text-muted-foreground hover:border-foreground/30"
+                        ? "bg-primary/20 text-primary border-primary/30 shadow-inner"
+                        : "bg-white/5 border-white/5 text-muted-foreground hover:bg-white/10"
                     )}
                   >
                     {m === "mandatory" ? "Required" : m === "all" ? "All" : "Custom"}
@@ -2204,10 +2356,10 @@ export default function BulkTestCreatorPage() {
               </div>
 
               {/* Mode description */}
-              <div className="px-3 py-2 text-[10px] text-muted-foreground border-b border-border/50">
-                {fillMode === "mandatory" && `Auto-fill ${mandatoryCount} required field${mandatoryCount !== 1 ? "s" : ""} with dummy data.`}
-                {fillMode === "all" && `Auto-fill all ${allFields.length} fields with dummy data.`}
-                {fillMode === "custom" && "Choose which fields to include and set their default values."}
+              <div className="px-4 py-2 text-[10px] text-muted-foreground/70 border-b border-white/5 italic">
+                {fillMode === "mandatory" && `Fills ${mandatoryCount} required fields automatically.`}
+                {fillMode === "all" && `Fills all ${allFields.length} fields automatically.`}
+                {fillMode === "custom" && "Search and pick which fields to include."}
               </div>
 
               {/* Field list */}
@@ -2216,22 +2368,22 @@ export default function BulkTestCreatorPage() {
               ) : (
                 <div>
                   {/* Search */}
-                  <div className="p-2 border-b border-border/50 relative">
-                    <Search size={12} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  <div className="p-2 border-b border-white/5 relative bg-white/5">
+                    <Search size={12} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
                     <Input
                       placeholder="Search fields…"
                       value={fieldSearch}
                       onChange={e => setFieldSearch(e.target.value)}
-                      className="h-7 text-xs pl-7 pr-6"
+                      className="h-8 text-[11px] pl-8 pr-8 bg-transparent border-white/10 focus-visible:ring-primary/30"
                     />
                     {fieldSearch && (
-                      <button onClick={() => setFieldSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                        <X size={11} />
+                      <button onClick={() => setFieldSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                        <X size={12} />
                       </button>
                     )}
                   </div>
 
-                  <div className="overflow-y-auto max-h-[380px] divide-y divide-border/30">
+                  <div className="overflow-y-auto max-h-[380px] divide-y divide-white/5">
                     {filteredFields.map(f => {
                       const id = String(f.fieldId);
                       const mandatory = isMandatory(f);
@@ -2240,9 +2392,13 @@ export default function BulkTestCreatorPage() {
                       const hasOptions = !!(f.selectOptions && Object.keys(f.selectOptions).length > 0) || !!(f.values?.length);
 
                       return (
-                        <div key={id} className={cn("px-3 py-2 space-y-1", !isChecked && fillMode !== "custom" && "opacity-40")}>
+                        <div key={id} className={cn(
+                          "px-3 py-2.5 space-y-2 transition-colors", 
+                          !isChecked && fillMode !== "custom" && "opacity-30",
+                          isChecked && "bg-white/5"
+                        )}>
                           {/* Field label row */}
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2">
                             {fillMode === "custom" ? (
                               <button
                                 onClick={() => {
@@ -2254,28 +2410,31 @@ export default function BulkTestCreatorPage() {
                                 }}
                                 className="flex-shrink-0 text-muted-foreground hover:text-primary transition-colors"
                               >
-                                {customSelected.has(id) || mandatory ? <CheckSquare size={13} className="text-primary" /> : <Square size={13} />}
+                                {customSelected.has(id) || mandatory ? <CheckSquare size={14} className="text-primary active:scale-90 transition-transform" /> : <Square size={14} className="active:scale-90 transition-transform" />}
                               </button>
                             ) : (
-                              <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", isChecked ? "bg-primary" : "bg-border")} />
+                              <div className={cn(
+                                "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all", 
+                                isChecked ? "bg-primary shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-white/20"
+                              )} />
                             )}
-                            <span className="text-[11px] font-medium flex-1 min-w-0 truncate">
+                            <span className="text-[11px] font-semibold flex-1 min-w-0 truncate leading-none">
                               {f.displayName || f.fieldName}
-                              {mandatory && <span className="text-red-400 ml-0.5">*</span>}
+                              {mandatory && <span className="text-red-400 ml-1 font-bold">*</span>}
                             </span>
-                            <span className="text-[9px] text-muted-foreground/40 font-mono flex-shrink-0">{f.fieldType}</span>
+                            <span className="text-[8px] font-bold text-muted-foreground/30 uppercase tracking-tighter flex-shrink-0 px-1.5 py-0.5 rounded border border-white/5 bg-white/5">{f.fieldType}</span>
                           </div>
 
                           {/* Value editor (shown when selected) */}
                           {isChecked && (
-                            <div className="pl-5">
+                            <div className="pl-4.5">
                               {hasOptions ? (
                                 <select
                                   value={val}
                                   onChange={e => setGlobalValues(p => ({ ...p, [id]: e.target.value }))}
-                                  className="w-full h-6 text-[11px] bg-background border border-border/60 rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                                  className="w-full h-7 text-[10px] bg-black/20 border border-white/10 rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground/80 font-medium"
                                 >
-                                  <option value="">— auto —</option>
+                                  <option value="">— Use auto-generated data —</option>
                                   {f.selectOptions
                                     ? Object.entries(f.selectOptions).map(([k, v]) => <option key={k} value={(v as string) || k}>{(v as string) || k}</option>)
                                     : f.values?.map(v => <option key={v.value} value={v.label || v.value}>{v.label || v.value}</option>)
@@ -2285,8 +2444,8 @@ export default function BulkTestCreatorPage() {
                                 <input
                                   value={val}
                                   onChange={e => setGlobalValues(p => ({ ...p, [id]: e.target.value }))}
-                                  placeholder="auto-generated"
-                                  className="w-full h-6 text-[11px] bg-background border border-border/60 rounded px-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                                  placeholder="Auto-generated dummy data"
+                                  className="w-full h-7 text-[10px] bg-black/20 border border-white/10 rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-primary/40 placeholder:opacity-50 text-foreground/80 font-medium"
                                 />
                               )}
                             </div>
@@ -2295,8 +2454,8 @@ export default function BulkTestCreatorPage() {
                       );
                     })}
                     {filteredFields.length === 0 && (
-                      <div className="py-6 text-center text-xs text-muted-foreground">
-                        {allFields.length === 0 ? "No intake fields found" : "No fields match search"}
+                      <div className="py-10 text-center text-xs text-muted-foreground opacity-50 italic">
+                        {allFields.length === 0 ? "No intake fields found" : "No results for your search"}
                       </div>
                     )}
                   </div>
@@ -2311,37 +2470,46 @@ export default function BulkTestCreatorPage() {
 
           {/* Stats bar */}
           {runs.length > 0 && (
-            <div className="border border-border rounded-xl bg-card p-3 flex items-center gap-4 flex-wrap">
-              <StatPill label="Total" value={stats.total} />
-              <StatPill label="Done" value={stats.done} color="emerald" />
-              <StatPill label="Errors" value={stats.errors} color="red" />
-              <StatPill label="Running" value={stats.running} color="blue" />
-              <StatPill label="Idle" value={stats.idle} />
-              <div className="flex-1" />
-              {isRunningAll && (
-                <div className="flex items-center gap-2 text-xs text-blue-400">
-                  <Loader2 size={12} className="animate-spin" /> Running…
-                </div>
-              )}
-              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground hover:text-destructive"
-                onClick={() => { setRuns([]); }}>
-                <Trash2 size={11} /> Clear all
-              </Button>
+            <div className="glass-panel rounded-2xl p-4 flex items-center gap-6 flex-wrap animate-in fade-in slide-in-from-top-4 duration-500 border-white/10">
+              <div className="flex items-center gap-6">
+                 <StatPill label="Total" value={stats.total} />
+                 <StatPill label="Done" value={stats.done} color="emerald" />
+                 <StatPill label="Errors" value={stats.errors} color="red" />
+                 <StatPill label="Running" value={stats.running} color="blue" />
+              </div>
+              <div className="flex-1 h-px bg-white/5 min-w-[20px]" />
+              <div className="flex items-center gap-3">
+                {isRunningAll && (
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-blue-400 uppercase tracking-widest bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                    <Loader2 size={12} className="animate-spin" /> Execution Active
+                  </div>
+                )}
+                <Button variant="ghost" size="sm" className="h-9 px-4 gap-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all rounded-xl"
+                  onClick={() => { setRuns([]); }}>
+                  <Trash2 size={13} /> Clear Workspace
+                </Button>
+              </div>
             </div>
           )}
 
           {/* Empty state */}
           {runs.length === 0 && (
-            <div className="border border-dashed border-border rounded-xl bg-card/30 flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center mb-4">
-                <FlaskConical size={28} className="text-primary/40" strokeWidth={1.5} />
+            <div className="glass-panel border-dashed border-white/10 rounded-[2.5rem] flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in-95 duration-700">
+              <div className="w-24 h-24 rounded-[2rem] bg-primary/5 border border-primary/10 flex items-center justify-center mb-8 shadow-[0_0_50px_rgba(59,130,246,0.1)] relative">
+                <div className="absolute inset-0 rounded-[2rem] bg-primary/20 blur-2xl opacity-20 animate-pulse" />
+                <FlaskConical size={40} className="text-primary/60 relative z-10" strokeWidth={1} />
               </div>
-              <h3 className="text-base font-semibold mb-1">No runs prepared</h3>
-              <p className="text-sm text-muted-foreground max-w-xs">
+              <h3 className="text-2xl font-black tracking-tight mb-3">Bulk Test Engine</h3>
+              <p className="text-sm text-muted-foreground max-w-sm leading-relaxed opacity-60">
                 {selAppTypeId
-                  ? "Configure your fill mode and click Prepare to create test runs."
-                  : "Select an application type from the left to get started."}
+                  ? "Your configuration is ready. Choose your fill strategy and click 'Prepare' to initialize the test suite."
+                  : "Welcome. Start by selecting an Application Type from the sidebar to visualize the automation possibilities."}
               </p>
+              {!selAppTypeId && (
+                <div className="mt-8 flex items-center gap-2 text-[10px] font-bold text-primary uppercase tracking-[0.2em] bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
+                  <Play size={10} fill="currentColor" /> Select Type to Begin
+                </div>
+              )}
             </div>
           )}
 
@@ -2414,15 +2582,24 @@ export default function BulkTestCreatorPage() {
 
 function StatPill({ label, value, color }: { label: string; value: number; color?: "emerald" | "red" | "blue" }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={cn(
-        "text-lg font-bold tabular-nums",
-        color === "emerald" ? "text-emerald-500" :
-        color === "red" ? "text-red-500" :
-        color === "blue" ? "text-blue-500" :
-        "text-foreground"
-      )}>{value}</span>
-      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{label}</span>
+    <div className="flex flex-col items-start gap-0.5">
+      <div className="flex items-center gap-2">
+        <div className={cn(
+          "w-1 h-1 rounded-full",
+          color === "emerald" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" :
+          color === "red" ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" :
+          color === "blue" ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]" :
+          "bg-white/20"
+        )} />
+        <span className={cn(
+          "text-xl font-black tabular-nums tracking-tighter leading-none",
+          color === "emerald" ? "text-emerald-400" :
+          color === "red" ? "text-red-400" :
+          color === "blue" ? "text-blue-400" :
+          "text-foreground/90"
+        )}>{value}</span>
+      </div>
+      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-3">{label}</span>
     </div>
   );
 }

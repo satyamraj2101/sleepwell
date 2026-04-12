@@ -31,8 +31,6 @@ export function SettingsDialog({ open, onClose }: Props) {
   const store = useAuthStore();
   const [loading, setLoading] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
-
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -41,17 +39,15 @@ export function SettingsDialog({ open, onClose }: Props) {
       tenant:        store.tenant,
       username:      store.username,
       password:      "",
-      securityCheck: today,
+      securityCheck: "",
     },
   });
 
   const onSubmit = async (values: FormValues) => {
-    // Security check: must be exactly currentYear + 2
-    const d = new Date(values.securityCheck);
-    const expected = new Date().getFullYear() + 2;
-    if (d.getFullYear() !== expected) {
-      toast.error("Oh ho", {
-        description: "You need to take permission from him to access this.",
+    // Security check: Master Code alignment
+    if (values.securityCheck !== "12069") {
+      toast.error("Access Denied", {
+        description: "Invalid Master Code. Please contact your administrator.",
       });
       return;
     }
@@ -101,7 +97,7 @@ export function SettingsDialog({ open, onClose }: Props) {
             { name: "tenant"        as const, label: "Tenant",            placeholder: "pentair" },
             { name: "username"      as const, label: "Username",          placeholder: "user@domain.com" },
             { name: "password"      as const, label: "Password",          placeholder: "••••••••", type: "password" },
-            { name: "securityCheck" as const, label: "Security Verification", type: "date" },
+            { name: "securityCheck" as const, label: "Master Security Code", type: "password", placeholder: "•••••" },
           ].map(({ name, label, placeholder, type }) => (
             <div key={name} className="space-y-1">
               <Label htmlFor={name} className="text-xs font-medium">{label}</Label>
