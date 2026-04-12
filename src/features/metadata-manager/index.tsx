@@ -77,6 +77,7 @@ export default function MetadataManagerPage() {
   const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
   const [showMissingOnly, setShowMissingOnly] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [isGlobalMode, setIsGlobalMode] = useState(false);
 
   // Panel state
   const [panel, setPanel] = useState<"none" | "create" | "edit">("none");
@@ -99,12 +100,12 @@ export default function MetadataManagerPage() {
     staleTime: 5 * 60_000,
   });
 
-  const fieldQueryKey = QK.fieldDefs(tenant, selAppTypeId ?? undefined);
+  const fieldQueryKey = QK.fieldDefs(tenant, isGlobalMode ? "global" : (selAppTypeId ?? undefined));
 
   const { data: fieldData, isLoading, error, refetch } = useQuery({
     queryKey: fieldQueryKey,
     queryFn: () => listFieldDefinitions(clients!.newCloud, tenant, {
-      applicationTypeId: selAppTypeId ?? undefined,
+      applicationTypeId: isGlobalMode ? undefined : (selAppTypeId ?? undefined),
       showOptions: true,
       pageSize: 500,
       metadataType: metaTypeFilter !== "all" ? metaTypeFilter : undefined,
@@ -177,6 +178,28 @@ export default function MetadataManagerPage() {
     return Array.from(set).sort();
   }, [allFields]);
 
+  // ── Influence Map (Impact Analysis) ──────────────────────────────────────
+  
+  const influenceMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    const processCond = (c: any) => {
+      const fid = parseInt(c?.conditionFieldId ?? c?.fieldId ?? (typeof c?.field === 'object' ? (c?.field as any)?.id : "") ?? "0", 10);
+      if (fid && !isNaN(fid)) map[fid] = (map[fid] || 0) + 1;
+    };
+
+    intakeGroups.forEach(g => {
+      g.sections?.forEach(s => {
+        s.fields?.forEach(f => {
+          let rules: any[] = [];
+          if (Array.isArray(f.visibilityConditions)) rules = f.visibilityConditions;
+          else if ((f as any).visibilityConditionObject?.rules) rules = (f as any).visibilityConditionObject.rules;
+          rules.filter(Boolean).forEach(processCond);
+        });
+      });
+    });
+    return map;
+  }, [intakeGroups]);
+
   const fields = useMemo(() => {
     const q = search.toLowerCase();
     return allFields.filter((f) => {
@@ -217,13 +240,15 @@ export default function MetadataManagerPage() {
         "Field Name": f.fieldName,
         "Field Type": f.fieldType,
         "App Type": f.applicationTypeName ?? "",
-        "Metadata Type": f.metadataType,
+        "Domain": f.metadataType,
+        "Logic Influence": influenceMap[f.fieldId] || 0,
         "Active": f.isActive ? "Yes" : "No",
         "Required": (f.isMandatoryField ?? f.isRequired) ? "Yes" : "No",
         "Visible": f.isVisible !== false ? "Yes" : "No",
         "Options Count": f.options?.length ?? 0,
         "Options": (f.options ?? []).map((o) => o.fieldOptionValue).join(", "),
         "Help Text": f.helpText ?? "",
+        "Comments": f.comments ?? "",
       }));
       const ws = utils.json_to_sheet(rows);
       const wb = utils.book_new();
@@ -242,15 +267,25 @@ export default function MetadataManagerPage() {
         description="Full CRUD on application type metadata fields, options, and intake form conditions."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant={isGlobalMode ? "secondary" : "outline"}
+              size="sm"
+              className={cn("gap-1.5 transition-all", isGlobalMode && "bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.1)]")}
+              onClick={() => setIsGlobalMode(!isGlobalMode)}
+            >
+              <Network size={13} className={cn(isGlobalMode && "animate-pulse")} />
+              {isGlobalMode ? "Global Mode: ON" : "Turn Global Mode ON"}
+            </Button>
+            <div className="w-px h-6 bg-border mx-1" />
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()}>
-              <RefreshCw size={13} /> Refresh
+              <RefreshCw size={13} className={isLoading ? "animate-spin" : ""} /> Refresh
             </Button>
             {tab === "metadata" && (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={exportToExcel} disabled={fields.length === 0}>
                   <Download size={13} /> Export
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={openCreate}>
+                <Button size="sm" className="gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20" onClick={openCreate}>
                   <Plus size={13} /> New Field
                 </Button>
               </>
@@ -260,71 +295,87 @@ export default function MetadataManagerPage() {
       />
 
       {/* Tab switcher */}
-      <div className="flex items-center gap-1 border-b border-border pb-0">
-        <TabBtn active={tab === "metadata"} onClick={() => setTab("metadata")} icon={<List size={12} />}>
-          Metadata Fields
+      <div className="flex items-center gap-2 bg-white/[0.02] border border-white/[0.05] p-1 rounded-2xl w-fit">
+        <TabBtn active={tab === "metadata"} onClick={() => setTab("metadata")} icon={<List size={13} />}>
+          Metadata
         </TabBtn>
-        <TabBtn active={tab === "intake"} onClick={() => setTab("intake")} icon={<GitBranch size={12} />}>
-          Intake Form Fields
+        <TabBtn active={tab === "intake"} onClick={() => setTab("intake")} icon={<GitBranch size={13} />}>
+          Intake Flow
           {tab === "intake" && !selAppTypeId && (
-            <span className="ml-1.5 text-[9px] text-amber-400">(select app type)</span>
+            <span className="ml-1.5 text-[9px] text-amber-400 opacity-80">(select app type)</span>
           )}
         </TabBtn>
-        <TabBtn active={tab === "tree"} onClick={() => setTab("tree")} icon={<Network size={12} />}>
-          Field Tree
+        <TabBtn active={tab === "tree"} onClick={() => setTab("tree")} icon={<Network size={13} />}>
+          Field Schema
           {tab === "tree" && !selAppTypeId && (
-            <span className="ml-1.5 text-[9px] text-amber-400">(select app type)</span>
+            <span className="ml-1.5 text-[9px] text-amber-400 opacity-80">(select app type)</span>
           )}
         </TabBtn>
       </div>
 
-      {/* Shared app type filter */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <select
-          value={selAppTypeId ?? ""}
-          onChange={(e) => { setSelAppTypeId(e.target.value ? Number(e.target.value) : null); }}
-          className="h-9 text-sm bg-background border border-border rounded-md px-3 focus:outline-none focus:ring-1 focus:ring-ring min-w-[200px]"
-        >
-          <option value="">{tab === "intake" ? "— Select an application type —" : "All application types"}</option>
-          {(appTypesRaw ?? []).map((at: any) => (
-            <option key={at.applicationTypeId} value={at.applicationTypeId}>{at.applicationTypeName}</option>
-          ))}
-        </select>
+      {/* Shared filters dashboard */}
+      <div className="p-4 bg-white/[0.01] border border-white/[0.05] rounded-2xl flex flex-wrap gap-4 items-center backdrop-blur-3xl">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[10px] uppercase tracking-widest font-black text-muted-foreground/40 ml-1">Application Context</label>
+          <select
+            value={selAppTypeId ?? ""}
+            disabled={isGlobalMode}
+            onChange={(e) => { setSelAppTypeId(e.target.value ? Number(e.target.value) : null); }}
+            className={cn(
+              "h-10 text-sm bg-white/5 border border-white/10 rounded-xl px-4 focus:outline-none focus:ring-1 focus:ring-primary/40 min-w-[240px] transition-all",
+              isGlobalMode && "opacity-40 cursor-not-allowed border-dashed"
+            )}
+          >
+            <option value="" className="bg-neutral-900">{tab === "intake" ? "— Select type —" : "All application types"}</option>
+            {(appTypesRaw ?? []).map((at: any) => (
+              <option key={at.applicationTypeId} value={at.applicationTypeId} className="bg-neutral-900">{at.applicationTypeName}</option>
+            ))}
+          </select>
+        </div>
 
         {tab === "metadata" && (
           <>
-            <select
-              value={metaTypeFilter}
-              onChange={(e) => setMetaTypeFilter(e.target.value)}
-              className="h-9 text-sm bg-background border border-border rounded-md px-3 focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value="all">All metadata types</option>
-              {METADATA_TYPES.map((mt) => (
-                <option key={mt.id} value={mt.id}>{mt.name}</option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase tracking-widest font-black text-muted-foreground/40 ml-1">Metadata Domain</label>
+              <select
+                value={metaTypeFilter}
+                onChange={(e) => setMetaTypeFilter(e.target.value)}
+                className="h-10 text-sm bg-white/5 border border-white/10 rounded-xl px-4 focus:outline-none focus:ring-1 focus:ring-primary/40 min-w-[180px] transition-all"
+              >
+                <option value="all" className="bg-neutral-900">All domains</option>
+                {METADATA_TYPES.map((mt) => (
+                  <option key={mt.id} value={mt.id} className="bg-neutral-900">{mt.name}</option>
+                ))}
+              </select>
+            </div>
 
-            <div className="relative flex-1 min-w-[160px] max-w-sm">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search by name, ID…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-8 pr-8 text-sm"
-              />
-              {search && (
-                <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                  <X size={13} />
-                </button>
-              )}
+            <div className="flex flex-col gap-1.5 flex-1 min-w-[240px]">
+              <label className="text-[10px] uppercase tracking-widest font-black text-muted-foreground/40 ml-1 flex items-center gap-1.5">
+                Active Search
+                {isGlobalMode && <span className="text-[9px] text-amber-500 font-bold bg-amber-500/10 px-1.5 rounded animate-pulse">Global</span>}
+              </label>
+              <div className="relative group">
+                <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <Input
+                  placeholder={isGlobalMode ? "Searching cross-AppType metadata..." : "Search by name, Internal key, or ID…"}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-10 pl-11 pr-10 text-sm bg-white/5 border border-white/10 rounded-xl focus:ring-primary/40 transition-all hover:bg-white/[0.08]"
+                />
+                {search && (
+                  <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {showMissingOnly && (
               <button
                 onClick={() => setShowMissingOnly(false)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-red-400 bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 rounded-full hover:bg-red-500/20 transition-colors"
+                className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-red-100 bg-red-600/80 border border-red-500/30 px-4 h-10 rounded-xl hover:bg-red-500 transition-all shadow-lg shadow-red-900/20 mt-5"
               >
-                <AlertTriangle size={10} /> Missing options only <X size={10} />
+                <AlertTriangle size={12} className="animate-bounce" /> Missing options only
               </button>
             )}
           </>
@@ -334,18 +385,48 @@ export default function MetadataManagerPage() {
       {/* ── METADATA TAB ── */}
       {tab === "metadata" && (
         <>
-          {/* Stats bar */}
+          {/* Premium Dashboard Stats */}
           {!isLoading && allFields.length > 0 && (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-              <StatTile label="Total" value={stats.total} />
-              <StatTile label="Active" value={stats.active} accent="green" onClick={() => setActiveFilter(activeFilter === "active" ? "all" : "active")} active={activeFilter === "active"} />
-              <StatTile label="Inactive" value={stats.inactive} accent={stats.inactive > 0 ? "amber" : "default"} onClick={() => setActiveFilter(activeFilter === "inactive" ? "all" : "inactive")} active={activeFilter === "inactive"} />
-              <StatTile label="Dropdown / Radio" value={stats.dropdownLike} accent="blue" onClick={() => setTypeFilter(typeFilter !== "all" ? "all" : "dropdown")} active={false} />
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <StatTile 
+                label="System Capacity" 
+                value={stats.total} 
+                subtext="Total Fields"
+                icon={<Layers size={14} />}
+              />
+              <StatTile 
+                label="Health Status" 
+                value={stats.active} 
+                subtext="Active in Leah"
+                accent="green" 
+                onClick={() => setActiveFilter(activeFilter === "active" ? "all" : "active")} 
+                active={activeFilter === "active"} 
+                icon={<CheckCircle2 size={14} />}
+              />
+              <StatTile 
+                label="Dormant Fields" 
+                value={stats.inactive} 
+                subtext="Configuration Only"
+                accent={stats.inactive > 0 ? "amber" : "default"} 
+                onClick={() => setActiveFilter(activeFilter === "inactive" ? "all" : "inactive")} 
+                active={activeFilter === "inactive"} 
+                icon={<EyeOff size={14} />}
+              />
+              <StatTile 
+                label="Interactive Metadata" 
+                value={stats.dropdownLike} 
+                subtext="Lists & Radios"
+                accent="blue" 
+                onClick={() => setTypeFilter(typeFilter !== "all" ? "all" : "dropdown")} 
+                active={false} 
+                icon={<List size={14} />}
+              />
               <StatTile
-                label="Missing Options"
+                label="Configuration Gaps"
                 value={stats.missingOptions}
+                subtext="Zero-option Dropdowns"
                 accent={stats.missingOptions > 0 ? "red" : "green"}
-                icon={stats.missingOptions > 0 ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+                icon={stats.missingOptions > 0 ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
                 onClick={() => setShowMissingOnly((v) => !v)}
                 active={showMissingOnly}
               />
@@ -403,6 +484,7 @@ export default function MetadataManagerPage() {
                 <FieldRow
                   key={f.fieldId}
                   field={f}
+                  influenceCount={influenceMap[f.fieldId] || 0}
                   expanded={expandedIds.has(f.fieldId)}
                   onToggle={() => toggleExpand(f.fieldId)}
                   onEdit={() => openEdit(f)}
@@ -432,8 +514,9 @@ export default function MetadataManagerPage() {
         <FieldTreePanel
           fields={allFields}
           isLoading={isLoading}
+          isGlobalMode={isGlobalMode}
           appTypeName={(appTypesRaw ?? []).find((at: any) => at.applicationTypeId === selAppTypeId)?.applicationTypeName}
-          hasAppType={!!selAppTypeId}
+          hasAppType={!!selAppTypeId || isGlobalMode}
         />
       )}
 
@@ -495,6 +578,7 @@ export default function MetadataManagerPage() {
 
 interface FieldRowProps {
   field: FieldDefinition;
+  influenceCount: number;
   expanded: boolean;
   onToggle: () => void;
   onEdit: () => void;
@@ -505,7 +589,7 @@ interface FieldRowProps {
   deletingOption: boolean;
 }
 
-function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption, onDeleteOption, addingOption, deletingOption }: FieldRowProps) {
+function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDelete, onAddOption, onDeleteOption, addingOption, deletingOption }: FieldRowProps) {
   const [newOpt, setNewOpt] = useState("");
   const [showAddOpt, setShowAddOpt] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -524,106 +608,198 @@ function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption,
   }
 
   return (
-    <div className={cn("bg-card transition-colors group", isMissing && "bg-red-500/[0.03]")}>
-      {/* ── Dense table row ── */}
+    <div className={cn(
+      "transition-all duration-300 relative overflow-hidden mb-1 mx-2 rounded-2xl border border-white/[0.05]",
+      expanded ? "bg-white/[0.04] shadow-2xl ring-1 ring-primary/20" : "bg-white/[0.02] hover:bg-white/[0.05]",
+      isMissing && "ring-1 ring-red-500/20 bg-red-500/[0.02]"
+    )}>
+      {/* ── Visual Backdrop for highlight ── */}
+      {influenceCount > 0 && (
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-3xl -translate-y-16 translate-x-16 pointer-events-none" />
+      )}
+
+      {/* ── Main row content ── */}
       <div
-        className="grid items-center gap-2 px-3 py-2 cursor-pointer hover:bg-muted/30 transition-colors select-none"
-        style={{ gridTemplateColumns: "14px 1fr auto auto auto auto auto" }}
+        className="grid items-center gap-4 px-6 py-4 cursor-pointer select-none"
+        style={{ gridTemplateColumns: "20px 1fr auto auto auto 120px" }}
         onClick={onToggle}
       >
-        {/* Expand chevron */}
-        <ChevronDown size={12} className={cn("text-muted-foreground/40 transition-transform duration-150 flex-shrink-0", expanded && "rotate-180")} />
+        {/* State Icon */}
+        <div className="flex items-center justify-center">
+          {expanded ? (
+            <ChevronDown size={14} className="text-primary animate-pulse" />
+          ) : (
+            <ChevronRight size={14} className="text-muted-foreground/30" />
+          )}
+        </div>
 
-        {/* Name + API name */}
+        {/* Name + API + ID */}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={cn("text-[13px] font-medium text-foreground truncate", !f.isActive && "opacity-50 line-through")}>
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className={cn("text-[14px] font-bold tracking-tight", !f.isActive && "opacity-40")}>
                {f.fieldDisplayName || f.fieldName}
             </span>
-            {isMissing && <AlertTriangle size={10} className="text-red-400 flex-shrink-0" />}
+            {influenceCount > 0 && (
+              <span className="text-[9px] font-black bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                <GitBranch size={8} /> Logic Driver ({influenceCount})
+              </span>
+            )}
+            {isMissing && (
+              <span className="text-[9px] font-black bg-red-500/10 text-red-100 border border-red-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                <AlertTriangle size={8} className="animate-pulse" /> Empty Control
+              </span>
+            )}
+            <span className="text-[9px] font-mono text-muted-foreground/20 ml-auto">#{f.fieldId}</span>
           </div>
-          <p className="text-[10px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-mono text-muted-foreground/40 lowercase max-w-[180px] truncate">{f.fieldName}</p>
+            {f.applicationTypeName && (
+              <span className="text-[9px] font-bold text-muted-foreground/30 uppercase tracking-widest">• {f.applicationTypeName}</span>
+            )}
+          </div>
+          {/* Options Preview for selection-type fields */}
+          {needsOptions && optCount > 0 && !expanded && (
+            <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+              <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/20 mr-1 italic">Preview:</span>
+              {(f.options ?? []).slice(0, 50).map((o, idx) => (
+                <span key={o.fieldOptionId} className="text-[9px] text-muted-foreground/40 bg-white/[0.03] px-1.5 py-0.5 rounded-md border border-white/5">
+                  {o.fieldOptionValue}
+                </span>
+              ))}
+              {optCount > 50 && <span className="text-[9px] text-muted-foreground/20">+{optCount - 50} more</span>}
+            </div>
+          )}
         </div>
 
-        {/* Type badge */}
-        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 whitespace-nowrap", tc.bg, tc.text, tc.border)}>
-          {f.fieldType || "—"}
-        </span>
-
-        {/* Status dots — Active · Required · Visible */}
-        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          <StatusDot active={f.isActive} label={f.isActive ? "Active" : "Inactive"} color={f.isActive ? "green" : "gray"} />
-          <StatusDot active={!!isRequired} label={isRequired ? "Required" : "Optional"} color={isRequired ? "amber" : "gray"} />
-          <StatusDot active={f.isVisible !== false} label={f.isVisible !== false ? "Visible" : "Hidden"} color={f.isVisible !== false ? "blue" : "gray"} />
-        </div>
-
-        {/* Options count */}
-        {needsOptions ? (
-          <span
-            className={cn("text-[10px] font-semibold tabular-nums w-10 text-right flex-shrink-0", optCount === 0 ? "text-red-400" : "text-muted-foreground/50")}
-            title={`${optCount} option${optCount !== 1 ? "s" : ""}`}
-          >
-            {optCount} opt
+        {/* Type & Capability */}
+        <div className="flex flex-col items-end gap-1 px-4 border-l border-white/5 h-8 justify-center">
+          <span className={cn("text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border", tc.bg, tc.text, tc.border)}>
+            {f.fieldType || "—"}
           </span>
-        ) : <span className="w-10" />}
+          {needsOptions && (
+             <span className={cn("text-[9px] font-bold tabular-nums", optCount === 0 ? "text-red-400" : "text-muted-foreground/40")}>
+               {optCount} option{optCount !== 1 ? 's' : ''}
+             </span>
+          )}
+        </div>
 
-        {/* ID */}
-        <span className="text-[9px] font-mono text-muted-foreground/30 w-8 text-right flex-shrink-0">#{f.fieldId}</span>
+        {/* Status Indicator Grid */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 px-6 border-l border-white/5 h-8 items-center">
+          <div className="flex items-center gap-2">
+            <StatusDot active={f.isActive} color={f.isActive ? "green" : "gray"} label="" />
+            <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30">Live</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusDot active={!!isRequired} color={isRequired ? "amber" : "gray"} label="" />
+            <span className="text-[10px] uppercase font-black tracking-widest text-muted-foreground/30">Req</span>
+          </div>
+        </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-0 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-          <IconBtn title="Edit" onClick={onEdit}><Edit2 size={11} /></IconBtn>
-          <IconBtn title="Copy ID" onClick={() => { navigator.clipboard.writeText(String(f.fieldId)); toast.success(`Copied #${f.fieldId}`); }}><Copy size={11} /></IconBtn>
-          <IconBtn title="Delete" className="text-red-400/70 hover:text-red-300 hover:bg-red-500/10" onClick={onDelete}><Trash2 size={11} /></IconBtn>
+        {/* Actions Overlay */}
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <button onClick={onEdit} className="p-2 hover:bg-white/10 rounded-xl transition-all text-muted-foreground hover:text-primary">
+            <Edit2 size={14} />
+          </button>
+          <button onClick={onDelete} className="p-2 hover:bg-red-500/10 rounded-xl transition-all text-muted-foreground hover:text-red-400">
+            <Trash2 size={14} />
+          </button>
         </div>
       </div>
 
       {/* Expanded details */}
       {expanded && (
-        <div className="px-3 pb-3 pt-2 border-t border-border/40 bg-muted/10 space-y-2">
-          {/* Two-column layout: flags + meta on left, options on right */}
-          <div className="flex gap-4">
-            {/* Left: flags + meta */}
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex flex-wrap gap-1.5">
-                <VisFlag active={f.isVisible !== false} label="Visible" />
-                <VisFlag active={f.isVisibleOnRequestDetails !== false} label="Req Details" />
-                <VisFlag active={f.displayInRequestJourney === true} label="Journey" />
-                <VisFlag active={f.displayInRequestDetails === true} label="In Details" />
-                {f.isForAllApplicationTypes && <VisFlag active={true} label="All Types" />}
+        <div className="px-6 pb-6 pt-4 border-t border-white/5 bg-white/[0.01] space-y-6 animate-in slide-in-from-top-2 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            {/* Column 1: Core Configuration Details */}
+            <div className="space-y-4">
+              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60 border-b border-primary/20 pb-2 flex items-center gap-2">
+                <Star size={12} /> System Flags
+              </h5>
+              <div className="grid grid-cols-1 gap-2">
+                <InsightFlag active={f.isVisible !== false} label="Always Visible" desc="Field is accessible in the core metadata set." />
+                <InsightFlag active={f.isVisibleOnRequestDetails !== false} label="Sidebar Summary" desc="Included in the request details side-panel." />
+                <InsightFlag active={f.displayInRequestJourney === true} label="Timeline Stage" desc="Promoted to the visual request journey/tracker." />
+                <InsightFlag active={f.displayInRequestDetails === true} label="Main Attributes" desc="Visible in the central information attributes tab." />
+                {f.isForAllApplicationTypes && <InsightFlag active={true} label="Universal Field" desc="Available globally across all application types." />}
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-mono text-muted-foreground/50 border-t border-border/10 pt-1">
-                {f.fieldTypeId && <span>TypeID: {f.fieldTypeId}</span>}
-                {f.metadataType && <span>MetaType: {f.metadataType}</span>}
-                {f.applicationTypeName && <span>AppType: {f.applicationTypeName}</span>}
-                {f.fieldGroup && <span>Group: {f.fieldGroup}</span>}
-              </div>
-              {f.helpText && (
-                <p className="text-[10px] text-muted-foreground/70 bg-muted/20 rounded px-2.5 py-1.5 border border-border/20">
-                  {f.helpText}
-                </p>
-              )}
             </div>
+
+            {/* Column 2: Data & Metadata Context */}
+            <div className="space-y-4">
+              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-400/60 border-b border-violet-400/20 pb-2 flex items-center gap-2">
+                <Layers size={12} /> Architectural Context
+              </h5>
+              <div className="space-y-3 bg-white/[0.02] p-4 rounded-2xl border border-white/5">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-muted-foreground/60 font-bold uppercase tracking-wider text-[9px]">Internal Type ID</span>
+                  <span className="font-mono text-violet-300">{f.fieldTypeId || "—"}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-muted-foreground/60 font-bold uppercase tracking-wider text-[9px]">Metadata Domain</span>
+                  <span className="font-mono text-emerald-300">{f.metadataType || "—"} (#{f.metadataType})</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-muted-foreground/60 font-bold uppercase tracking-wider text-[9px]">Field Category</span>
+                  <span className="text-primary font-bold">{f.fieldGroup || "Uncategorized"}</span>
+                </div>
+                {influenceCount > 0 && (
+                  <div className="pt-2 mt-2 border-t border-white/5">
+                    <p className="text-[10px] text-amber-400/80 leading-relaxed font-medium">
+                      This field determines the visibility of {influenceCount} other intake components.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Column 3: Documentation & Guidance */}
+            <div className="space-y-4">
+              <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400/60 border-b border-emerald-400/20 pb-2 flex items-center gap-2">
+                <Edit2 size={12} /> Configurator Guidance
+              </h5>
+              <div className="space-y-3">
+                <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-1">Help Text Prompt</p>
+                  <p className="text-[11px] text-muted-foreground italic leading-relaxed">
+                    {f.helpText || "No user-facing help text configured."}
+                  </p>
+                </div>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">Internal Comments</p>
+                  <p className="text-[11px] text-muted-foreground/50 leading-relaxed">
+                    {f.comments || "No internal design notes recorded."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
           </div>
 
-          {/* Options section */}
+          {/* Options Management Section */}
           {needsOptions && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Options ({optCount})
-                </p>
+            <div className="mt-8 pt-6 border-t border-white/5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-xl">
+                    <List size={14} className="text-primary" />
+                  </div>
+                  <div>
+                    <h6 className="text-xs font-black uppercase tracking-widest">Metadata Values</h6>
+                    <p className="text-[10px] text-muted-foreground/40">{optCount} available selection{optCount !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
                 <button
-                  className="text-[10px] text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 transition-colors"
+                  className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-2"
                   onClick={() => { setShowAddOpt(true); setTimeout(() => inputRef.current?.focus(), 50); }}
                 >
-                  <Plus size={10} /> Add option
+                  <Plus size={12} /> New Option
                 </button>
               </div>
 
               {/* Option list */}
-              {optCount > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
+              {optCount > 0 ? (
+                <div className="flex flex-wrap gap-2 p-4 bg-white/[0.02] rounded-3xl border border-white/5">
                   {f.options!.map((o) => (
                     <OptionChip
                       key={o.fieldOptionId}
@@ -632,6 +808,13 @@ function FieldRow({ field: f, expanded, onToggle, onEdit, onDelete, onAddOption,
                       deleting={deletingOption}
                     />
                   ))}
+                </div>
+              ) : !showAddOpt && (
+                <div className="flex items-center justify-center p-8 bg-red-500/[0.02] border border-dashed border-red-500/20 rounded-3xl">
+                  <div className="text-center">
+                    <AlertTriangle size={24} className="text-red-400/40 mx-auto mb-2" />
+                    <p className="text-xs text-red-400/60 font-medium">Critical Gap: No options defined for this selector.</p>
+                  </div>
                 </div>
               )}
 
@@ -975,33 +1158,42 @@ function FieldFormPanel({ mode, field, fieldTypes, appTypes, tenant, clients, on
 // ─── Small helpers ─────────────────────────────────────────────────────────────
 
 function StatTile({
-  label, value, accent = "default", icon, onClick, active,
+  label, value, subtext, accent = "default", icon, onClick, active,
 }: {
-  label: string; value: number; accent?: "blue" | "red" | "green" | "amber" | "default";
+  label: string; value: number; subtext?: string; accent?: "blue" | "red" | "green" | "amber" | "default";
   icon?: React.ReactNode; onClick?: () => void; active?: boolean;
 }) {
-  const colors = {
-    blue: "text-blue-400",
-    red: value > 0 ? "text-red-400" : "text-emerald-400",
-    green: "text-emerald-400",
-    amber: value > 0 ? "text-amber-400" : "text-muted-foreground",
-    default: "text-foreground",
+  const themes = {
+    blue:    "from-blue-500/10 to-transparent border-blue-500/20 text-blue-400 shadow-blue-500/5",
+    red:     value > 0 ? "from-red-500/10 to-transparent border-red-500/20 text-red-100 shadow-red-500/5" : "from-emerald-500/10 to-transparent border-emerald-500/20 text-emerald-400 opacity-60",
+    green:   "from-emerald-500/10 to-transparent border-emerald-500/20 text-emerald-400 shadow-emerald-500/5",
+    amber:   value > 0 ? "from-amber-500/10 to-transparent border-amber-500/20 text-amber-400 shadow-amber-500/5" : "text-muted-foreground opacity-40",
+    default: "from-white/5 to-transparent border-white/10 text-foreground",
   };
+
+  const currentTheme = themes[accent];
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        "text-left bg-card border rounded-xl px-3 py-2.5 transition-all",
-        onClick ? "cursor-pointer hover:border-border/80" : "cursor-default",
-        active ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20" : "border-border"
+        "relative text-left bg-gradient-to-br border rounded-3xl p-4 transition-all duration-300 overflow-hidden group/tile",
+        onClick ? "cursor-pointer hover:border-white/20 hover:-translate-y-1" : "cursor-default",
+        active ? "border-primary/40 bg-primary/10 ring-1 ring-primary/20" : "border-white/5",
+        currentTheme
       )}
     >
-      <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
-      <div className={cn("text-xl font-bold flex items-center gap-1", colors[accent])}>
-        {value}
+      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover/tile:opacity-20 transition-all group-hover/tile:scale-125">
         {icon}
+      </div>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 mb-3">{label}</p>
+      <div className="flex items-baseline gap-2">
+        <span className="text-3xl font-black tabular-nums tracking-tighter">
+          {value}
+        </span>
+        {subtext && <span className="text-[10px] font-bold text-muted-foreground/30 uppercase tracking-widest">{subtext}</span>}
       </div>
     </button>
   );
@@ -1057,6 +1249,28 @@ function StatusDot({ active, label, color }: { active: boolean; label: string; c
         !active && "opacity-40"
       )}
     />
+  );
+}
+
+function InsightFlag({ active, label, desc }: { active: boolean; label: string; desc: string }) {
+  return (
+    <div className={cn(
+      "flex items-center gap-3 p-2.5 rounded-xl border transition-all",
+      active 
+        ? "bg-primary/10 border-primary/20 hover:bg-primary/20" 
+        : "bg-white/[0.02] border-white/5 opacity-40 grayscale"
+    )}>
+      <div className={cn(
+        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+        active ? "bg-primary/20 text-primary" : "bg-white/5 text-muted-foreground"
+      )}>
+        {active ? <Eye size={14} /> : <EyeOff size={14} />}
+      </div>
+      <div>
+        <p className={cn("text-[11px] font-black uppercase tracking-wider", active ? "text-primary" : "text-muted-foreground")}>{label}</p>
+        <p className="text-[10px] text-muted-foreground/60 leading-tight">{desc}</p>
+      </div>
+    </div>
   );
 }
 
@@ -1162,45 +1376,59 @@ function IntakeFieldsPanel({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {groups.map((group, gi) => {
         const allFields: IntakeFormField[] = (group.sections ?? []).flatMap((s) => s.fields ?? []);
 
         return (
-          <div key={gi} className="border border-border rounded-xl overflow-hidden">
+          <div key={gi} className="overflow-hidden bg-white/[0.02] border border-white/[0.05] rounded-3xl backdrop-blur-3xl shadow-2xl">
             {/* Group header */}
-            <div className="bg-muted/30 px-4 py-2.5 border-b border-border flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary/10 to-transparent px-6 py-5 border-b border-white/[0.05] flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-semibold text-foreground">{(group as any).groupName || (group as any).name || `Group ${gi + 1}`}</h4>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="p-1.5 bg-primary/20 rounded-lg">
+                    <Layers size={14} className="text-primary" />
+                  </div>
+                  <h4 className="text-sm font-black uppercase tracking-[0.2em] text-foreground">
+                    {(group as any).groupName || (group as any).name || `Group ${gi + 1}`}
+                  </h4>
+                </div>
                 {(group as any).groupType && (
-                  <span className="text-[10px] text-muted-foreground font-mono">{(group as any).groupType}</span>
+                  <span className="text-[10px] text-muted-foreground/40 font-mono tracking-widest uppercase">{(group as any).groupType}</span>
                 )}
               </div>
-              <span className="text-[10px] text-muted-foreground">{allFields.length} field{allFields.length !== 1 ? "s" : ""}</span>
+              <div className="text-right">
+                <span className="text-2xl font-black text-white/10 tabular-nums leading-none block">{allFields.length}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">Fields in Group</span>
+              </div>
             </div>
 
             {/* Section labels */}
-            {(group.sections ?? []).map((section, si) => (
-              <div key={si}>
-                {section.fields && section.fields.length > 0 && (
-                  <div className="px-4 py-1.5 bg-muted/10 border-b border-border/50">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      {(section as any).sectionName || (section as any).name || `Section ${si + 1}`}
-                    </span>
+            <div className="p-2 space-y-2">
+              {(group.sections ?? []).map((section, si) => (
+                <div key={si} className="space-y-1">
+                  {section.fields && section.fields.length > 0 && (
+                    <div className="px-4 py-2 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-white/[0.05]" />
+                      <span className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.3em] whitespace-nowrap">
+                        {(section as any).sectionName || (section as any).name || `Section ${si + 1}`}
+                      </span>
+                      <div className="h-px flex-1 bg-white/[0.05]" />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-1">
+                    {(section.fields ?? []).map((f) => (
+                      <IntakeFieldRow
+                        key={f.fieldId}
+                        field={f}
+                        expanded={expandedFields.has(f.fieldId)}
+                        onToggle={() => toggleField(f.fieldId)}
+                      />
+                    ))}
                   </div>
-                )}
-                <div className="divide-y divide-border/50">
-                  {(section.fields ?? []).map((f) => (
-                    <IntakeFieldRow
-                      key={f.fieldId}
-                      field={f}
-                      expanded={expandedFields.has(f.fieldId)}
-                      onToggle={() => toggleField(f.fieldId)}
-                    />
-                  ))}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
 
           </div>
         );
@@ -1468,9 +1696,10 @@ function ConditionCard({ cond, ci }: { cond: any; ci: number }) {
 
 // ─── Field Tree Panel ─────────────────────────────────────────────────────────
 
-function FieldTreePanel({ fields, isLoading, appTypeName, hasAppType }: {
+function FieldTreePanel({ fields, isLoading, isGlobalMode, appTypeName, hasAppType }: {
   fields: FieldDefinition[];
   isLoading: boolean;
+  isGlobalMode: boolean;
   appTypeName?: string;
   hasAppType: boolean;
 }) {
@@ -1524,49 +1753,59 @@ function FieldTreePanel({ fields, isLoading, appTypeName, hasAppType }: {
   if (isLoading) return <div className="flex justify-center py-20"><Spinner size={28} /></div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-gradient-to-r from-blue-500/10 to-violet-500/10 border border-blue-500/20 rounded-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <Network size={16} className="text-blue-400" />
+      <div className="flex flex-wrap items-center justify-between gap-6 p-6 bg-white/[0.02] border border-white/[0.05] rounded-[2rem] backdrop-blur-3xl shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/10 rounded-2xl ring-1 ring-primary/20">
+            <Network size={20} className="text-primary" />
           </div>
           <div>
-            <p className="text-sm font-bold text-foreground">{appTypeName ?? "Unknown App Type"}</p>
-            <p className="text-[11px] text-muted-foreground">
-              <span className="text-emerald-400 font-semibold">{activeCount} active</span>
-              {inactiveCount > 0 && <span className="ml-2 text-muted-foreground/60">{inactiveCount} inactive</span>}
-              {" · "}
-              <span className="text-violet-400">{groupedFields.length} groups</span>
+            <h4 className="text-lg font-black tracking-tight text-white mb-0.5">{isGlobalMode ? "Global Metadata Map" : (appTypeName ?? "Schema Intelligence")}</h4>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">
+              <span className="text-emerald-400">{activeCount} Node{activeCount !== 1 ? 's' : ''} live</span>
+              <span className="mx-2 opacity-20">|</span>
+              <span className="text-violet-400">{groupedFields.length} Logical Groups</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <div className="flex items-center gap-2 flex-wrap flex-1 justify-end">
+          <div className="relative group min-w-[200px]">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
             <input
               value={treeSearch}
               onChange={e => setTreeSearch(e.target.value)}
-              placeholder="Search fields…"
-              className="h-8 pl-7 pr-3 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring w-48"
+              placeholder="Search schema..."
+              className="h-10 pl-10 pr-4 text-xs bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/40 w-full transition-all"
             />
           </div>
           <button
             onClick={() => setShowInactive(p => !p)}
-            className={cn("h-8 px-3 text-xs rounded-md border transition-colors", showInactive ? "bg-amber-500/20 border-amber-500/40 text-amber-400" : "bg-background border-border text-muted-foreground hover:text-foreground")}
+            className={cn(
+              "h-10 px-4 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all",
+              showInactive 
+                ? "bg-amber-500/20 border-amber-500/40 text-amber-400" 
+                : "bg-white/5 border-white/10 text-muted-foreground hover:text-white"
+            )}
           >
-            {showInactive ? "Hiding inactive" : "Show inactive"}
+            {showInactive ? "Viewing All" : "Hide Dormant"}
           </button>
-          <button onClick={expandAll} className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border bg-background rounded-md transition-colors">Expand all</button>
-          <button onClick={collapseAll} className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground border border-border bg-background rounded-md transition-colors">Collapse all</button>
+          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 ml-2">
+            <button onClick={expandAll} className="h-8 px-3 text-[10px] font-black uppercase tracking-widest hover:text-primary transition-colors">Expand</button>
+            <div className="w-px h-4 bg-white/10 my-auto" />
+            <button onClick={collapseAll} className="h-8 px-3 text-[10px] font-black uppercase tracking-widest hover:text-primary transition-colors">Collapse</button>
+          </div>
         </div>
       </div>
 
-      {/* Tree */}
-      <div className="space-y-2">
+      {/* Tree Visualization */}
+      <div className="space-y-3">
         {groupedFields.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-12">No fields found{treeSearch ? " matching your search" : ""}.</p>
+          <div className="py-24 text-center bg-white/[0.01] border border-dashed border-white/5 rounded-[2rem]">
+            <Search size={32} className="mx-auto mb-4 opacity-10" />
+            <p className="text-sm font-medium text-muted-foreground/40">Zero matches found in schema</p>
+          </div>
         )}
         {groupedFields.map(([group, groupFields]) => {
           const isOpen = expandedGroups.has(group);
@@ -1577,33 +1816,41 @@ function FieldTreePanel({ fields, isLoading, appTypeName, hasAppType }: {
           }).length;
 
           return (
-            <div key={group} className="border border-border rounded-xl overflow-hidden">
+            <div key={group} className={cn(
+              "group/tree rounded-2xl border transition-all duration-300",
+              isOpen ? "bg-white/[0.04] border-white/10 shadow-xl" : "bg-white/[0.01] border-white/5 hover:bg-white/[0.02]"
+            )}>
               {/* Group header */}
               <button
                 onClick={() => toggleGroup(group)}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+                className="w-full flex items-center gap-4 px-6 py-4 text-left relative"
               >
-                <div className={cn("transition-transform duration-200 text-muted-foreground/60", isOpen && "rotate-90")}>
-                  <ChevronRight size={14} />
+                <div className={cn("transition-transform duration-300 text-muted-foreground/20 group-hover/tree:text-primary", isOpen && "rotate-90")}>
+                  <ChevronRight size={16} />
                 </div>
-                <Layers size={13} className="text-violet-400 shrink-0" />
-                <span className="font-semibold text-sm text-foreground flex-1 truncate">{group}</span>
-                <div className="flex items-center gap-2">
-                  {hasConditioned > 0 && (
-                    <span className="text-[9px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                      <GitBranch size={7} />{hasConditioned} conditional
-                    </span>
-                  )}
-                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                    {activeInGroup} active
-                  </span>
-                  {groupFields.length - activeInGroup > 0 && (
-                    <span className="text-[10px] text-muted-foreground/50 bg-muted border border-border/50 px-2 py-0.5 rounded-full">
-                      {groupFields.length - activeInGroup} inactive
-                    </span>
-                  )}
-                  <span className="text-[10px] text-muted-foreground/40">{groupFields.length} total</span>
+                <div className="p-2 bg-violet-500/10 rounded-xl group-hover/tree:scale-110 transition-transform">
+                  <Layers size={14} className="text-violet-400" />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-bold text-sm text-foreground block truncate">{group}</span>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">{groupFields.length} Components</span>
+                    {hasConditioned > 0 && (
+                      <span className="text-[9px] text-violet-400/60 font-black uppercase tracking-widest flex items-center gap-1">
+                        <GitBranch size={8} /> {hasConditioned} Dynamic
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {!isOpen && (
+                  <div className="flex -space-x-1.5 opacity-40">
+                    {groupFields.slice(0, 3).map(f => (
+                       <div key={f.fieldId} className="w-5 h-5 rounded-full border border-neutral-900 bg-neutral-800 flex items-center justify-center text-[7px] font-black">
+                         {f.fieldType?.charAt(0).toUpperCase()}
+                       </div>
+                    ))}
+                  </div>
+                )}
               </button>
 
               {/* Field rows */}
@@ -1637,19 +1884,36 @@ function FieldTreePanel({ fields, isLoading, appTypeName, hasAppType }: {
                         {/* Field info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={cn("text-[13px] font-medium truncate max-w-[280px]", !f.isActive && "line-through text-muted-foreground")}>
-                              {f.fieldDisplayName || f.fieldName}
+                            <span className={cn("text-[13px] font-black text-foreground truncate max-w-[280px]", !f.isActive && "opacity-40")}>
+                               {f.fieldDisplayName || f.fieldName}
                             </span>
                             {isRequired && (
-                              <span className="text-[8px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1 py-0.5 rounded shrink-0">REQ</span>
+                              <span className="text-[8px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1 py-0.5 rounded shrink-0">REQ</span>
                             )}
                             {condCount > 0 && (
-                              <span className="text-[8px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1 py-0.5 rounded shrink-0 flex items-center gap-0.5">
+                              <span className="text-[8px] font-black text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1 py-0.5 rounded shrink-0 flex items-center gap-0.5">
                                 <GitBranch size={7} />{condCount}
                               </span>
                             )}
                           </div>
-                          <p className="text-[9px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-[9px] font-mono text-muted-foreground/40 truncate">{f.fieldName}</p>
+                            {f.applicationTypeName && isGlobalMode && (
+                              <span className="text-[8px] font-black text-muted-foreground/20 uppercase tracking-[0.2em]">• {f.applicationTypeName}</span>
+                            )}
+                          </div>
+                          
+                          {/* Options preview for tree nodes */}
+                          {isDropdownLike(f.fieldType) && f.options && f.options.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1 opacity-60">
+                              {f.options.slice(0, 50).map(o => (
+                                <span key={o.fieldOptionId} className="text-[8px] bg-white/5 px-1 rounded border border-white/5 text-muted-foreground/60">
+                                  {o.fieldOptionValue}
+                                </span>
+                              ))}
+                              {f.options.length > 50 && <span className="text-[8px] text-muted-foreground/30">+{f.options.length - 50}</span>}
+                            </div>
+                          )}
                         </div>
 
                         {/* Type chip */}

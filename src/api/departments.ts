@@ -40,11 +40,18 @@ export async function listCurrencies(
   client: AxiosInstance,
   tenant: string
 ): Promise<Currency[]> {
-  const res = await client.get(`/api/${tenant}/Master/currency`, {
-    params: { PageSize: 500 },
+  const res = await client.get(`/api/${tenant}/currency`, {
+    params: { PageNumber: 1, PageSize: 500 },
   });
-  const d = res.data;
-  return d?.data ?? d?.items ?? (Array.isArray(d) ? d : []);
+  const raw = res.data;
+  const items = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
+  
+  return (items as any[]).map(c => ({
+    currencyId: c.id,
+    currencyName: c.name,
+    currencyCode: c.code,
+    symbol: c.symbol || null
+  }));
 }
 
 export interface Country {

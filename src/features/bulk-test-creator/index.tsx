@@ -504,16 +504,16 @@ function IntakeFieldInput({
   if (field.selectOptions && Object.keys(field.selectOptions).length > 0) {
     return (
       <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
-        <option value="">— select —</option>
-        {Object.entries(field.selectOptions).map(([k, v]) => <option key={k} value={(v as string) || k}>{(v as string) || k}</option>)}
+        <option value="" className="bg-neutral-900">— select —</option>
+        {Object.entries(field.selectOptions).map(([k, v]) => <option key={k} value={(v as string) || k} className="bg-neutral-900">{(v as string) || k}</option>)}
       </select>
     );
   }
   if (field.values?.length) {
     return (
       <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
-        <option value="">— select —</option>
-        {field.values.map(v => <option key={v.value} value={v.label || v.value}>{v.label || v.value}</option>)}
+        <option value="" className="bg-neutral-900">— select —</option>
+        {field.values.map(v => <option key={v.value} value={v.label || v.value} className="bg-neutral-900">{v.label || v.value}</option>)}
       </select>
     );
   }
@@ -539,10 +539,10 @@ function IntakeFieldInput({
     else if (isPriority) {
       return (
         <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
-          <option value="">— select —</option>
-          <option value="1">High</option>
-          <option value="2">Medium</option>
-          <option value="3">Low</option>
+          <option value="" className="bg-neutral-900">— select —</option>
+          <option value="1" className="bg-neutral-900">High</option>
+          <option value="2" className="bg-neutral-900">Medium</option>
+          <option value="3" className="bg-neutral-900">Low</option>
         </select>
       );
     }
@@ -550,8 +550,8 @@ function IntakeFieldInput({
     if (options && options.length > 0) {
       return (
         <select value={value} onChange={e => onChange(e.target.value)} className={cls}>
-          <option value="">— select —</option>
-          {options.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+          <option value="" className="bg-neutral-900">— select —</option>
+          {options.map(o => <option key={o.id} value={o.name} className="bg-neutral-900">{o.name}</option>)}
         </select>
       );
     }
@@ -1078,8 +1078,8 @@ function RunCard({
                   onChange={e => onClientChange(e.target.value ? Number(e.target.value) : null)}
                   className="w-full h-9 text-xs bg-white/5 border border-white/10 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground/80 transition-all hover:bg-white/[0.08]"
                 >
-                  <option value="">— Use Global —</option>
-                  {liveClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="" className="bg-neutral-900">— Use Global —</option>
+                  {liveClients.map(c => <option key={c.id} value={c.id} className="bg-neutral-900">{c.name}</option>)}
                 </select>
               </div>
               <div className="space-y-2">
@@ -1089,8 +1089,8 @@ function RunCard({
                   onChange={e => onPartyChange(e.target.value ? Number(e.target.value) : null)}
                   className="w-full h-9 text-xs bg-white/5 border border-white/10 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground/80 transition-all hover:bg-white/[0.08]"
                 >
-                  <option value="">— Use Global —</option>
-                  {liveParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <option value="" className="bg-neutral-900">— Use Global —</option>
+                  {liveParties.map(p => <option key={p.id} value={p.id} className="bg-neutral-900">{p.name}</option>)}
                 </select>
               </div>
             </div>
@@ -1378,7 +1378,7 @@ export default function BulkTestCreatorPage() {
 
   const { data: fetchCurrencies = [] } = useQuery({
     queryKey: ["lookupCurrencies", tenant],
-    queryFn: () => listCurrencies(clients!.oldProd, tenant),
+    queryFn: () => listCurrencies(clients!.newCloud, tenant),
     enabled: !!clients && !!tenant,
   });
 
@@ -1631,6 +1631,12 @@ export default function BulkTestCreatorPage() {
       if (newRuns.length > 0) {
         setRuns(prev => [...prev, ...newRuns]);
         setImportInput("");
+        
+        // Auto-select app type if not currently set, to load relevant metadata fields
+        if (!selAppTypeId && newRuns[0].appTypeId) {
+          setSelAppTypeId(newRuns[0].appTypeId);
+        }
+
         toast.success(`Successfully imported ${newRuns.length} request(s)`, { id: toastId });
       } else {
         toast.error("Failed to import any requests. Check if IDs exist.", { id: toastId });
