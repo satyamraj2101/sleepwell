@@ -84,31 +84,51 @@ export function FieldEditorDrawer({
     if (field && isOpen) {
       setFormData(field);
 
-      // Parse logic
-      let parsedLogic: LogicTree = { condition: "AND", rules: [] };
-      const rawLogic = field.visibilityConditions || field.visibilityCondition;
-
-      if (typeof rawLogic === 'string' && rawLogic.startsWith('{')) {
-        try {
-          parsedLogic = JSON.parse(rawLogic);
-          setRawLogicJson(JSON.stringify(parsedLogic, null, 2));
-        } catch (e) {
-          console.error("Failed to parse logic:", e);
+  // Parse logic helper
+  const updateLogicFromRaw = (raw: any) => {
+    if (!raw) return;
+    let parsed: LogicTree = { condition: "AND", rules: [] };
+    
+    try {
+      if (typeof raw === 'string' && raw.startsWith('{')) {
+        parsed = JSON.parse(raw);
+      } else if (typeof raw === 'object' && raw !== null) {
+        // Handle legacy wrapper { condition: string, rules: [] } or { rules: [] }
+        if (Array.isArray(raw.rules)) {
+          parsed = raw as LogicTree;
+        } else if (raw.visibilityConditionObject && Array.isArray(raw.visibilityConditionObject.rules)) {
+          parsed = raw.visibilityConditionObject as LogicTree;
         }
-      } else if (typeof rawLogic === 'object' && rawLogic !== null) {
-        parsedLogic = rawLogic as LogicTree;
-        setRawLogicJson(JSON.stringify(parsedLogic, null, 2));
       }
 
-      setLogic(parsedLogic);
-      setActiveTab("identity");
+      if (parsed.rules && parsed.rules.length > 0) {
+        setLogic(parsed);
+        setRawLogicJson(JSON.stringify(parsed, null, 2));
+      }
+    } catch (e) {
+      console.error("Failed to parse logic:", e);
+    }
+  };
 
-      // If clients available, fetch old prod detail for richer data
+  useEffect(() => {
+    if (isOpen && field) {
+      setFormData(field);
+      setActiveTab("identity");
+      setOldProdDetail(null); // Reset when opening new field
+
+      // Initial parse from shallow data
+      updateLogicFromRaw(field.visibilityConditions || field.visibilityCondition || (field as any).visibilityConditionObject);
+
+      // Fetch rich data
       if (clients && field?.fieldId && username && tenant) {
         import("@/api/metadata").then(({ getFieldDetailOldProd }) => {
           getFieldDetailOldProd(clients.oldProd, tenant, field.fieldId, username)
-            .then(d => setOldProdDetail(d))
-            .catch(() => {}); // Silently fail - just use what we have
+            .then(d => {
+              setOldProdDetail(d);
+              // Re-parse with rich data (will contain full rules)
+              if (d) updateLogicFromRaw(d.visibilityCondition || d.visibilityConditions || d.visibilityConditionObject);
+            })
+            .catch(() => {});
         });
       }
     }
