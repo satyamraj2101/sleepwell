@@ -245,14 +245,19 @@ export function FieldEditorDrawer({
       displayInRequestJourney: !!formData.displayInRequestJourney ? 1 : 0,
       displayInRequestDetails: !!formData.displayInRequestDetails ? 1 : 0,
       isForAllApplicationTypes: !!formData.isForAllApplicationTypes,
-      applicationTypeIds: normalizedAppTypeIds,
-      applicationTypeMandatoryData: normalizedAppTypeIds.map(numId => {
-         const matrixEntry = (formData.applicationTypeMandatoryData || []).find(m => m.applicationTypeId === numId);
-         return {
-            applicationTypeId: numId,
-            isMandatory: !!matrixEntry?.isMandatory
-         };
-      }),
+      // Use oldProdDetail as fallback for applicationTypeIds — never send empty [] (causes ArgumentNullException server-side)
+      applicationTypeIds: normalizedAppTypeIds.length > 0 
+        ? normalizedAppTypeIds 
+        : (oldProdDetail?.applicationTypeIds || null),
+      applicationTypeMandatoryData: normalizedAppTypeIds.length > 0
+        ? normalizedAppTypeIds.map(numId => {
+           const matrixEntry = (formData.applicationTypeMandatoryData || oldProdDetail?.applicationTypeMandatoryData || []).find((m: any) => m.applicationTypeId === numId);
+           return {
+              applicationTypeId: numId,
+              isMandatory: !!matrixEntry?.isMandatory
+           };
+        })
+        : (oldProdDetail?.applicationTypeMandatoryData || null),
       visibilityConditions: JSON.stringify(finalLogic),
       fieldGroup: formData.fieldGroup || oldProdDetail?.fieldGroup || 100008,
       helpText: stripHtml(formData.helpText || ""),
@@ -265,14 +270,17 @@ export function FieldEditorDrawer({
       addAttachment: oldProdDetail?.addAttachment || "NO",
       importantDateFieldId: oldProdDetail?.importantDateFieldId || 1,
       requestorUsername: username || "integreonpg",
-      options: (formData.options || []).map(o => ({
-         id: o.fieldOptionId || (o as any).id || 0,
-         value: o.fieldOptionValue || (o as any).value || "",
-         isDefault: !!o.isDefault ? 1 : 0,
-         fieldId: field?.fieldId || 0,
-         fieldOptionOrderId: o.fieldOptionOrderId || 0,
-         isActive: o.isActive !== false ? 1 : 0
-      }))
+      // Use oldProdDetail options if no UI changes — never send empty options[] for a field that has options (causes ArgumentNullException)
+      options: (formData.options && formData.options.length > 0)
+        ? formData.options.map(o => ({
+           id: o.fieldOptionId || (o as any).id || 0,
+           value: o.fieldOptionValue || (o as any).value || "",
+           isDefault: !!o.isDefault ? 1 : 0,
+           fieldId: field?.fieldId || 0,
+           fieldOptionOrderId: o.fieldOptionOrderId || 0,
+           isActive: o.isActive !== false ? 1 : 0
+        }))
+        : (oldProdDetail?.options || [])
     };
 
     if (clients && username && tenant && field?.fieldId && !isBulk) {
