@@ -5,9 +5,13 @@ import { toast } from "sonner";
 import {
   Plus, Copy, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Search, X, Trash2,
   Edit2, Download, RefreshCw, Star, Eye, EyeOff, Loader2, GitBranch, List, Network, Layers,
+  DollarSign, Zap, Activity, Info, Calendar, Type, BookOpen, GitMerge, Circle, Unlock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { PageHeader, Spinner, ErrorAlert } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
@@ -20,10 +24,16 @@ import {
   createFieldDefinition,
   updateFieldDefinition,
   deleteFieldDefinition,
+  getConditionFilters,
+  getMetaDataFieldTypes,
+  getNumericCustomFields,
 } from "@/api/metadata";
 import { getIntakeFormFields } from "@/api/contractRequest";
 import { QK, cn } from "@/lib/utils";
 import { FieldDefinition, FieldOption, FieldTypeInfo, AddUpdateFieldPayload, IntakeFormField, IntakeFormFieldGroup } from "@/types";
+import { BlueprintInspectorDrawer } from "./components/BlueprintInspectorDrawer";
+import { SimulatedField } from "./components/SimulatedFields";
+import { isFieldVisible, getLogicTriggers, evaluateCondition } from "./utils/logicEvaluator";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -66,10 +76,441 @@ function typeColor(ft: string) {
   return TYPE_COLORS[(ft ?? "").toLowerCase()] ?? { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" };
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Condition Matrix Panel ──────────────────────────────────────────────────
+
+function normalizeId(id: any) {
+  if (!id) return "";
+  const s = String(id);
+  return s.startsWith('F') ? s.substring(1) : s;
+}
+
+function normalizeOp(op: string) {
+  const o = (op || "").toLowerCase();
+  if (o === "equals" || o === "==" || o === "is") return "IS";
+  if (o === "not_equals" || o === "!=" || o === "is_not") return "IS NOT";
+  if (o === "contains") return "CONTAINS";
+  if (o === "greater_than") return ">";
+  if (o === "less_than") return "<";
+  if (o === "is_empty") return "IS EMPTY";
+  if (o === "is_not_empty") return "HAS VALUE";
+  return o;
+}
+
+function sanitizeLabel(label: string, fieldName?: string) {
+  if (!label) return fieldName || "Unknown Field";
+  if (label.includes(',') && label.length > 50) return fieldName || "Multi-App Component";
+  return label;
+}
+
+// Branch color palette for condition groups
+const BRANCH_PALETTE = [
+  { bg: "bg-violet-500/10",  border: "border-violet-500/25", text: "text-violet-300",  dot: "bg-violet-400",  line: "border-violet-500/20"  },
+  { bg: "bg-sky-500/10",     border: "border-sky-500/25",    text: "text-sky-300",     dot: "bg-sky-400",     line: "border-sky-500/20"     },
+  { bg: "bg-emerald-500/10", border: "border-emerald-500/25",text: "text-emerald-300", dot: "bg-emerald-400", line: "border-emerald-500/20" },
+  { bg: "bg-amber-500/10",   border: "border-amber-500/25",  text: "text-amber-300",   dot: "bg-amber-400",   line: "border-amber-500/20"   },
+  { bg: "bg-rose-500/10",    border: "border-rose-500/25",   text: "text-rose-300",    dot: "bg-rose-400",    line: "border-rose-500/20"    },
+  { bg: "bg-cyan-500/10",    border: "border-cyan-500/25",   text: "text-cyan-300",    dot: "bg-cyan-400",    line: "border-cyan-500/20"    },
+  { bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/25",text: "text-fuchsia-300", dot: "bg-fuchsia-400", line: "border-fuchsia-500/20" },
+  { bg: "bg-orange-500/10",  border: "border-orange-500/25", text: "text-orange-300",  dot: "bg-orange-400",  line: "border-orange-500/20"  },
+];
+
+function ConditionMatrixPanel({
+  matrix,
+  rawRulesList,
+  selAppTypeId,
+  onRefresh,
+  onInspect,
+  isLoading,
+  globalSearch
+}: {
+  matrix: Record<string, Record<string, any[]>>;
+  rawRulesList: any[];
+  selAppTypeId: number | null;
+  onRefresh: () => void;
+  onInspect: (id: number) => void;
+  isLoading: boolean;
+  globalSearch: string;
+}) {
+  const [activeDriver, setActiveDriver] = useState<string | null>(null);
+  const [sideSearch, setSideSearch] = useState("");
+  const [expandedBranches, setExpandedBranches] = useState<Set<string>>(new Set());
+
+  const driversFound = Object.keys(matrix).length;
+
+  const totalBranches = useMemo(() =>
+    Object.values(matrix).reduce((s, d) => s + Object.keys(d).length, 0), [matrix]);
+  const totalRules = useMemo(() =>
+    Object.values(matrix).flatMap(d => Object.values(d).flat()).length, [matrix]);
+
+  const sideFiltered = useMemo(() => {
+    const q = (sideSearch || globalSearch).toLowerCase();
+    return Object.keys(matrix).filter(d => {
+      if (!q) return true;
+      if (d.toLowerCase().includes(q)) return true;
+      return Object.values(matrix[d]).flat().some((m: any) => m.target?.toLowerCase().includes(q));
+    }).sort();
+  }, [matrix, sideSearch, globalSearch]);
+
+  useEffect(() => {
+    const drivers = Object.keys(matrix);
+    if (drivers.length > 0 && (!activeDriver || !matrix[activeDriver])) setActiveDriver(drivers[0]);
+  }, [matrix, activeDriver]);
+
+  // Auto-expand all branches when driver changes
+  useEffect(() => {
+    if (activeDriver && matrix[activeDriver]) {
+      setExpandedBranches(new Set(Object.keys(matrix[activeDriver])));
+    }
+  }, [activeDriver, matrix]);
+
+  const getFieldTypeIcon = (type: string, size = 10) => {
+    const t = (type || "").toLowerCase();
+    if (t.includes("dropdown") || t.includes("select")) return <List size={size} />;
+    if (t.includes("radio")) return <Plus size={size} />;
+    if (t.includes("date")) return <Calendar size={size} />;
+    if (t.includes("text")) return <Type size={size} />;
+    if (t.includes("guidance")) return <Info size={size} />;
+    return <Activity size={size} />;
+  };
+
+  if (!selAppTypeId && rawRulesList.length > 0 && rawRulesList.every((c: any) => c.appType !== "Global System Rule")) {
+     return (
+       <div className="py-24 text-center max-w-sm mx-auto space-y-5">
+          <div className="h-16 w-16 bg-amber-500/8 rounded-3xl flex items-center justify-center mx-auto border border-amber-500/15 shadow-xl shadow-amber-500/5">
+            <Zap size={28} className="text-amber-400/80" />
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-white/80 tracking-tight">Rule Context Required</h3>
+            <p className="text-sm text-white/30 leading-relaxed mt-2">
+              Select an Application Context above to map logic rules and visibility conditions.
+            </p>
+          </div>
+       </div>
+     );
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-280px)] overflow-hidden border border-white/[0.07] rounded-2xl bg-[#08080f]/90 backdrop-blur-3xl shadow-2xl">
+
+      {/* ── Top Stats Bar ── */}
+      <div className="flex items-center gap-4 px-5 py-3 border-b border-white/[0.05] bg-white/[0.015] shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-primary/10 rounded-lg border border-primary/20">
+            <Zap size={13} className="text-primary" />
+          </div>
+          <span className="text-[11px] font-black uppercase tracking-[0.15em] text-white/40">Logic Matrix</span>
+        </div>
+
+        <div className="h-4 w-px bg-white/[0.08]" />
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg bg-primary/8 text-primary/80 border border-primary/15">
+            <GitBranch size={9} /> {driversFound} Drivers
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg bg-violet-500/8 text-violet-400/80 border border-violet-500/15">
+            <Network size={9} /> {totalBranches} Branches
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1 rounded-lg bg-emerald-500/8 text-emerald-400/80 border border-emerald-500/15">
+            <Activity size={9} /> {totalRules} Rules
+          </span>
+        </div>
+
+        <div className="flex-1" />
+
+        {isLoading && <Loader2 size={13} className="animate-spin text-white/20" />}
+        <button
+          onClick={onRefresh}
+          className="h-7 w-7 flex items-center justify-center rounded-lg text-white/20 hover:text-white/60 hover:bg-white/[0.06] transition-all border border-transparent hover:border-white/[0.08]"
+          title="Refresh rules"
+        >
+          <RefreshCw size={13} />
+        </button>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Sidebar ── */}
+        <div className="w-64 border-r border-white/[0.05] overflow-hidden flex flex-col bg-white/[0.01]">
+          {/* Sidebar search */}
+          <div className="p-3 border-b border-white/[0.05] shrink-0">
+            <div className="relative">
+              <Search size={11} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+              <input
+                value={sideSearch}
+                onChange={e => setSideSearch(e.target.value)}
+                placeholder="Filter drivers…"
+                className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl pl-7 pr-3 py-2 text-[11px] text-white/60 placeholder:text-white/20 focus:outline-none focus:border-primary/30 focus:bg-white/[0.05] transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Driver list */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
+            {driversFound === 0 && (
+              <div className="py-10 text-center text-xs text-white/20 italic">No logic drivers found</div>
+            )}
+            {sideFiltered.map(driver => {
+              const branches = Object.keys(matrix[driver]).length;
+              const targets = Object.values(matrix[driver]).flat().length;
+              const types = Array.from(new Set(Object.values(matrix[driver]).flat().map((i: any) => i.targetType)));
+              const isActive = activeDriver === driver;
+              return (
+                <button
+                  key={driver}
+                  onClick={() => setActiveDriver(driver)}
+                  className={cn(
+                    "w-full text-left px-3 py-3 rounded-xl transition-all duration-150 border group",
+                    isActive
+                      ? "bg-primary/10 border-primary/20 shadow-sm"
+                      : "border-transparent hover:bg-white/[0.04] hover:border-white/[0.07]"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className={cn(
+                      "text-[12px] font-bold leading-snug line-clamp-2",
+                      isActive ? "text-primary" : "text-white/60 group-hover:text-white/85"
+                    )}>
+                      {driver}
+                    </span>
+                    <span className={cn(
+                      "text-[9px] font-black shrink-0 px-1.5 py-0.5 rounded-full tabular-nums mt-0.5",
+                      isActive ? "bg-primary/20 text-primary" : "bg-white/[0.06] text-white/25"
+                    )}>
+                      {branches}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-[9px] text-white/20 tabular-nums">{targets} field{targets !== 1 ? 's' : ''}</span>
+                    <div className="flex gap-0.5 ml-auto">
+                      {types.slice(0, 4).map((t, i) => (
+                        <div key={i} className={cn(
+                          "h-3.5 w-3.5 rounded-md flex items-center justify-center transition-colors",
+                          isActive ? "bg-primary/10 text-primary/60 border border-primary/20" : "bg-white/[0.04] text-white/20 border border-white/[0.06]"
+                        )}>
+                          {getFieldTypeIcon(t as string)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Main Content ── */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {activeDriver && matrix[activeDriver] ? (
+            <div className="p-6 space-y-8 max-w-4xl">
+
+              {/* Driver header */}
+              <div className="flex items-start gap-4 pb-6 border-b border-white/[0.05]">
+                <div className="h-11 w-11 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 shadow-lg shadow-primary/5">
+                  <GitBranch size={18} className="text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-[22px] font-black text-white/90 tracking-tight leading-tight">{activeDriver}</h2>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                    <span className="text-[10px] text-white/25 uppercase tracking-[0.15em] font-black">Logic Source</span>
+                    <span className="text-white/10">·</span>
+                    <span className="text-[10px] text-white/30 font-bold">
+                      {Object.keys(matrix[activeDriver]).length} condition branch{Object.keys(matrix[activeDriver]).length !== 1 ? 'es' : ''}
+                    </span>
+                    <span className="text-white/10">·</span>
+                    <span className="text-[10px] text-white/30 font-bold">
+                      {Object.values(matrix[activeDriver]).flat().length} field{Object.values(matrix[activeDriver]).flat().length !== 1 ? 's' : ''} gated
+                    </span>
+                  </div>
+                </div>
+
+                {/* Branch overview pills */}
+                <div className="flex flex-wrap gap-1.5 shrink-0">
+                  {Object.entries(matrix[activeDriver]).map(([cond, items], idx) => {
+                    const col = BRANCH_PALETTE[idx % BRANCH_PALETTE.length];
+                    return (
+                      <button
+                        key={cond}
+                        onClick={() => setExpandedBranches(prev => {
+                          const next = new Set(prev);
+                          next.has(cond) ? next.delete(cond) : next.add(cond);
+                          return next;
+                        })}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[10px] font-black transition-all",
+                          col.bg, col.border, col.text
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", col.dot)} />
+                        {cond}
+                        <span className="opacity-50 font-normal">({(items as any[]).length})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Condition branches */}
+              {Object.entries(matrix[activeDriver]).map(([cond, items], branchIdx) => {
+                const col = BRANCH_PALETTE[branchIdx % BRANCH_PALETTE.length];
+                const isOpen = expandedBranches.has(cond);
+                const itemsArr = items as any[];
+
+                return (
+                  <div key={cond} className="space-y-3">
+
+                    {/* Branch header */}
+                    <button
+                      onClick={() => setExpandedBranches(prev => {
+                        const next = new Set(prev);
+                        next.has(cond) ? next.delete(cond) : next.add(cond);
+                        return next;
+                      })}
+                      className="w-full flex items-center gap-3 group"
+                    >
+                      <div className={cn("h-2 w-2 rounded-full shrink-0 ring-2 ring-offset-[3px] ring-offset-[#08080f] transition-all", col.dot,
+                        isOpen ? "ring-current opacity-100" : "ring-transparent opacity-60")} />
+                      <div className={cn(
+                        "flex items-center gap-2.5 px-4 py-2 rounded-2xl border text-sm font-black transition-all duration-200 shrink-0",
+                        col.bg, col.border, col.text,
+                        isOpen ? "shadow-sm" : "opacity-70 group-hover:opacity-100"
+                      )}>
+                        <span className="text-[9px] uppercase font-black tracking-[0.15em] opacity-50">IF</span>
+                        <span className="italic font-black">{activeDriver}</span>
+                        <span className="text-[9px] uppercase font-black tracking-[0.15em] opacity-50">IS</span>
+                        <span className="text-[13px]">"{cond}"</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-white/30 font-bold">
+                        <span className="text-white/15">→</span>
+                        <span>{itemsArr.length} field{itemsArr.length !== 1 ? 's' : ''} revealed</span>
+                      </div>
+                      <div className="h-px flex-1 bg-white/[0.04] group-hover:bg-white/[0.07] transition-colors" />
+                      <ChevronDown size={13} className={cn("text-white/20 transition-transform duration-200 shrink-0", isOpen && "rotate-180")} />
+                    </button>
+
+                    {/* Target rows */}
+                    {isOpen && (
+                      <div className={cn(
+                        "ml-5 rounded-2xl overflow-hidden border divide-y",
+                        col.line, "divide-white/[0.04] bg-white/[0.015]"
+                      )}>
+                        {/* Table header */}
+                        <div className="grid items-center gap-3 px-4 py-2 bg-white/[0.02]"
+                          style={{ gridTemplateColumns: "20px 100px 1fr auto 28px" }}>
+                          <span />
+                          <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Type</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Field</span>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-white/20 text-right">Context</span>
+                          <span />
+                        </div>
+
+                        {itemsArr.map((m: any, idx: number) => {
+                          const tc = typeColor(m.targetType);
+                          return (
+                            <div
+                              key={m.id}
+                              className="grid items-center gap-3 px-4 py-3 hover:bg-white/[0.025] transition-colors group/row"
+                              style={{ gridTemplateColumns: "20px 100px 1fr auto 28px" }}
+                            >
+                              {/* Index */}
+                              <span className="text-[9px] font-black text-white/15 tabular-nums">{idx + 1}</span>
+
+                              {/* Type */}
+                              <div className={cn(
+                                "inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[8.5px] font-black uppercase tracking-wide truncate",
+                                tc.bg, tc.text, tc.border
+                              )}>
+                                {getFieldTypeIcon(m.targetType)}
+                                <span className="truncate">{m.targetType || "—"}</span>
+                              </div>
+
+                              {/* Field name + options */}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={cn(
+                                    "text-[13px] font-bold leading-tight",
+                                    m.targetExists ? "text-white/85" : "text-red-400/70 italic"
+                                  )}>
+                                    {m.target}
+                                  </span>
+                                  {m.targetRequired && (
+                                    <span className="text-[8.5px] font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
+                                      MANDATORY
+                                    </span>
+                                  )}
+                                  {!m.targetExists && (
+                                    <span className="text-[9px] text-red-400/50 italic font-medium">• orphaned rule</span>
+                                  )}
+                                </div>
+                                {m.targetOptions && m.targetOptions.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {m.targetOptions.slice(0, 7).map((opt: string, i: number) => (
+                                      <span key={i} className="text-[8px] text-white/25 bg-white/[0.03] border border-white/[0.05] px-1.5 py-0.5 rounded-md font-medium">
+                                        {opt}
+                                      </span>
+                                    ))}
+                                    {m.targetOptions.length > 7 && (
+                                      <span className="text-[8px] text-white/15 font-bold self-center">+{m.targetOptions.length - 7} more</span>
+                                    )}
+                                  </div>
+                                )}
+                                {m.targetGuidance && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-1 mt-1 text-[9px] text-amber-400/50 hover:text-amber-400/80 cursor-help transition-colors">
+                                          <Info size={9} /> Has guidance
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs bg-[#14141c] border-white/10 text-[11px] leading-relaxed p-4 rounded-xl shadow-2xl text-white/60">
+                                        <div className="rich-text-content" dangerouslySetInnerHTML={{ __html: m.targetGuidance }} />
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
+
+                              {/* App type */}
+                              <span className="text-[9px] text-white/20 text-right max-w-[140px] truncate font-medium" title={m.appType}>
+                                {m.appType}
+                              </span>
+
+                              {/* Inspect button */}
+                              <button
+                                onClick={() => onInspect(m.targetFieldId)}
+                                className="h-7 w-7 flex items-center justify-center rounded-lg opacity-0 group-hover/row:opacity-100 bg-white/[0.04] hover:bg-primary/20 text-white/25 hover:text-primary transition-all border border-transparent hover:border-primary/20"
+                                title="Open Blueprint Inspector"
+                              >
+                                <BookOpen size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-center space-y-4 opacity-20">
+                <div className="h-16 w-16 rounded-3xl border-2 border-dashed border-white/20 flex items-center justify-center mx-auto">
+                  <Network size={28} />
+                </div>
+                <p className="text-sm font-bold uppercase tracking-[0.2em]">Select a driver</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 
 export default function MetadataManagerPage() {
-  const [tab, setTab] = useState<"metadata" | "intake" | "tree">("metadata");
+  const [tab, setTab] = useState<"metadata" | "intake" | "tree" | "rules">("metadata");
   const [selAppTypeId, setSelAppTypeId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -82,10 +523,20 @@ export default function MetadataManagerPage() {
   // Panel state
   const [panel, setPanel] = useState<"none" | "create" | "edit">("none");
   const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
+  const [selectedInspectorId, setSelectedInspectorId] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<FieldDefinition | null>(null);
 
+  // Intake Simulation State
+  const [simulationValues, setSimulationValues] = useState<Record<number, any>>({});
+  const [ghostMode, setGhostMode] = useState(false);
+
+  const resetSimulation = () => {
+    setSimulationValues({});
+    toast.success("Simulation reset");
+  };
+
   const clients = useApiClients();
-  const { tenant } = useAuthStore();
+  const { tenant, username } = useAuthStore();
   const qc = useQueryClient();
 
   // ── Queries ──────────────────────────────────────────────────────────────
@@ -124,9 +575,136 @@ export default function MetadataManagerPage() {
   const { data: intakeGroups = [], isLoading: intakeLoading } = useQuery({
     queryKey: ["intakeFields", tenant, selAppTypeId],
     queryFn: () => getIntakeFormFields(clients!.newCloud, tenant, selAppTypeId!),
-    enabled: !!clients && !!selAppTypeId && tab === "intake",
+    enabled: !!clients && !!selAppTypeId && (tab === "intake" || tab === "metadata"),
     staleTime: 2 * 60_000,
   });
+
+  const { data: numericFields = [], error: numericError, isLoading: numericLoading } = useQuery({
+    queryKey: ["numericFields", tenant, username],
+    queryFn: () => getNumericCustomFields(clients!.oldProd, tenant, username),
+    enabled: !!clients && !!username,
+    staleTime: 30 * 60_000,
+  });
+
+  const { data: conditionFilters = [], error: rulesError, isLoading: rulesLoading, refetch: refetchRules } = useQuery({
+    queryKey: ["conditionFilters", tenant],
+    queryFn: () => getConditionFilters(clients!.oldProd, tenant),
+    enabled: !!clients && !!tenant,
+    staleTime: 30 * 60_000,
+  });
+
+  // Global Library for resolution
+  const { data: globalMetadataRaw } = useQuery({
+    queryKey: ["global-metadata-dictionary", tenant, selAppTypeId],
+    queryFn: () => listFieldDefinitions(clients!.newCloud, tenant, { 
+      applicationTypeId: selAppTypeId ?? undefined,
+      pageSize: 1000, 
+      showOptions: true 
+    }),
+    enabled: !!clients && !!tenant && !!selAppTypeId,
+    staleTime: 5 * 60_000,
+  });
+  const globalDictionary = globalMetadataRaw?.data ?? [];
+
+  useEffect(() => {
+    if (rulesError) toast.error(`Logic Engine Error: ${(rulesError as Error).message}`);
+    if (numericError) toast.error(`Numeric Diagnostics Error: ${(numericError as Error).message}`);
+  }, [rulesError, numericError]);
+
+  // Intelligent Auto-Prefill for Simulation
+  useEffect(() => {
+    if (!intakeGroups || intakeGroups.length === 0) return;
+
+    setSimulationValues(prev => {
+      const newVals = { ...prev };
+      let changed = false;
+
+      intakeGroups.forEach(g => {
+        const groupName = (g.groupName || g.groupLabel || "").toLowerCase();
+        const sections = g.sections ?? [];
+        
+        sections.forEach(s => {
+          const sectionName = (s.sectionName || "").toLowerCase();
+          const isPartnerContext = groupName.includes("partner") || groupName.includes("legal party") || sectionName.includes("partner") || sectionName.includes("legal party") || sectionName.includes("counterparty");
+          const isRequesterContext = groupName.includes("application") || sectionName.includes("requester") || sectionName.includes("applicant");
+
+          (s.fields ?? []).forEach(f => {
+            // Only pre-fill if field is currently empty
+            if (newVals[f.fieldId] !== undefined && newVals[f.fieldId] !== "") return;
+
+            const name = (f.fieldName || f.ctgFieldName || "").toLowerCase();
+            const display = (f.displayName || "").toLowerCase();
+            const hasOptions = f.selectOptions && Object.keys(f.selectOptions).length > 0;
+            const firstOpt = hasOptions ? Object.keys(f.selectOptions!)[0] : null;
+
+            // 1. Mock Requester Info
+            if (isRequesterContext || name.includes("requestor") || name.includes("addedby") || display.includes("requester") || name.includes("applicant")) {
+               if (display.includes("dept") || display.includes("department")) {
+                 newVals[f.fieldId] = firstOpt || "Legal Operations";
+                 changed = true;
+               } else if (display.includes("user") || display.includes("name") || name.includes("id") || display.includes("requester")) {
+                 newVals[f.fieldId] = firstOpt || username || "Mock Requester";
+                 changed = true;
+               }
+            } 
+            
+            // 2. Mock Partner / Counterparty Info
+            if (isPartnerContext || name.includes("counterparty") || display.includes("counterparty") || display.includes("legal party") || name.includes("party")) {
+               if (display.includes("name") || name.includes("name") || display.includes("legal party") || display.includes("partner")) {
+                 newVals[f.fieldId] = firstOpt || "Mock Counterparty Ltd.";
+                 changed = true;
+               } else if (display.includes("country")) {
+                 newVals[f.fieldId] = firstOpt || "United States";
+                 changed = true;
+               } else if (display.includes("city")) {
+                 newVals[f.fieldId] = "New York";
+                 changed = true;
+               } else if (display.includes("state")) {
+                 newVals[f.fieldId] = "NY";
+                 changed = true;
+               } else if (display.includes("email")) {
+                 newVals[f.fieldId] = "compliance@mock-partner.com";
+                 changed = true;
+               } else if (display.includes("type") || display.includes("entity") || display.includes("party type")) {
+                 newVals[f.fieldId] = firstOpt || "Corporation";
+                 changed = true;
+               }
+            }
+
+            // 3. Mock Assignee
+            if (name.includes("assignee") || display.includes("assignee")) {
+               newVals[f.fieldId] = firstOpt || "Mock Legal Counsel";
+               changed = true;
+            }
+            
+            // 4. Dates
+            if (display.includes("date") && !newVals[f.fieldId]) {
+               newVals[f.fieldId] = new Date().toISOString().split('T')[0];
+               changed = true;
+            }
+            
+            // 5. Hard Mandatory Fallback (The "Speed-Test" mode)
+            // If the field is mandatory and still empty, we MUST fill it to clear blocks
+            if (f.isRequired && !newVals[f.fieldId]) {
+               const type = (f.fieldType || "").toLowerCase();
+               if (hasOptions) {
+                 newVals[f.fieldId] = firstOpt;
+               } else if (type.includes("date")) {
+                 newVals[f.fieldId] = new Date().toISOString().split('T')[0];
+               } else if (type.includes("number")) {
+                 newVals[f.fieldId] = "0";
+               } else {
+                 newVals[f.fieldId] = "Simulated Value";
+               }
+               changed = true;
+            }
+          });
+        });
+      });
+
+      return changed ? newVals : prev;
+    });
+  }, [intakeGroups, username]);
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -164,29 +742,154 @@ export default function MetadataManagerPage() {
 
   const allFields = fieldData?.data ?? [];
 
+  const { matrix, rawRulesList } = useMemo(() => {
+    const list: any[] = [];
+    const fieldsMap = new Map<string, FieldDefinition>();
+    allFields.forEach(f => {
+      if (f.fieldName) fieldsMap.set(f.fieldName.toLowerCase(), f);
+      if (f.fieldDisplayName) fieldsMap.set(f.fieldDisplayName.toLowerCase(), f);
+      fieldsMap.set(normalizeId(f.ctgFieldName || String(f.fieldId)), f);
+    });
+
+    const processItem = (cf: any) => {
+      let condObj: any = cf.visibilityConditionObject;
+      const rawCondStr = cf.visibilityConditions || cf.visibilityCondition;
+      if (!condObj && typeof rawCondStr === 'string' && rawCondStr.startsWith('{')) {
+        try { condObj = JSON.parse(rawCondStr); } catch (e) {}
+      }
+
+      if (!condObj) return;
+
+      const extractRules = (node: any) => {
+        if (!node) return;
+        if (Array.isArray(node.rules)) {
+          node.rules.forEach(extractRules);
+        } else if (node.conditionFieldId || node.fieldId || node.field?.id) {
+          const r = node;
+          const sourceLabel = (r.label || r.displayName || r.field?.label || r.field?.displayName || "").toLowerCase();
+          const rawSourceId = r.conditionFieldId || r.fieldId || r.field?.id || "";
+          const cleanSourceId = normalizeId(rawSourceId);
+          
+          const sourceField = (sourceLabel ? fieldsMap.get(sourceLabel) : null) || fieldsMap.get(cleanSourceId) || fieldsMap.get(String(rawSourceId).toLowerCase());
+          const targetLabel = (cf.fieldName || cf.displayName || cf.question || "").toLowerCase();
+          const rawTargetId = cf.fieldId || cf.ctgFieldName || "";
+          const cleanTargetId = normalizeId(rawTargetId);
+          const targetField = (targetLabel ? fieldsMap.get(targetLabel) : null) || fieldsMap.get(cleanTargetId) || fieldsMap.get(String(rawTargetId).toLowerCase());
+
+          // Value extraction logic
+          let displayVal = "??";
+          if (r.values && r.values.length > 0) {
+            displayVal = r.values.map((v: any) => v.label || v.value).join(', ');
+          } else {
+            displayVal = r.value || r.conditionFieldValue || "??";
+          }
+
+          const finalSource = sanitizeLabel(sourceField?.fieldDisplayName || sourceField?.fieldName || r.label || r.displayName || r.field?.label, sourceField?.fieldName);
+          let finalTarget = sanitizeLabel(targetField?.fieldDisplayName || targetField?.fieldName || cf.displayName || cf.question || cf.fieldDisplayName || cf.fieldName, targetField?.fieldName);
+          
+          // Special fallback for unnamed Guidance nodes
+          if (!finalTarget || finalTarget === "??") {
+            const rawGuidance = targetField?.guidanceText || targetField?.helpText || cf.guidanceText || cf.helpText || "";
+            if (rawGuidance) {
+              const plain = rawGuidance.replace(/<[^>]*>?/gm, '').trim();
+              finalTarget = plain.length > 40 ? plain.substring(0, 40) + "..." : plain;
+            } else {
+              finalTarget = `Guidance (${cleanTargetId})`;
+            }
+          }
+
+          let implementation = cf.applicationTypeName || "";
+          if (implementation.includes(',') && implementation.length > 40) {
+            implementation = `${implementation.split(',').length} Application Contexts`;
+          } else if (!implementation) {
+            implementation = cf.applicationTypeIds ? "Local Logic" : "Global System Rule";
+          }
+
+          const uniqueKey = `${rawSourceId}-${cleanTargetId}-${displayVal}-${implementation}`;
+          if (list.some(existing => existing.key === uniqueKey)) return;
+
+          list.push({
+            key: uniqueKey,
+            id: `${cf.id || Math.random()}-${rawSourceId}-${cleanTargetId}`,
+            source: finalSource,
+            sourceId: cleanSourceId,
+            sourceInternalId: sourceField?.fieldId || 0,
+            sourceExists: !!sourceField,
+            conditionOp: normalizeOp(r.operator),
+            conditionVal: displayVal,
+            target: finalTarget,
+            targetId: cleanTargetId,
+            targetExists: !!targetField,
+            targetActive: targetField ? (targetField.isActive ?? true) : (cf.isActive ?? true),
+            targetType: targetField?.fieldType || "Field",
+            targetGroup: targetField?.fieldGroup || (cf.fieldGroup || "General"),
+            targetRequired: targetField?.isRequired || cf.isRequired || false,
+            targetGuidance: targetField?.guidanceText || targetField?.helpText || cf.guidanceText || "",
+            targetOptions: (targetField?.options || []).map(o => o.fieldOptionValue),
+            targetFieldId: targetField?.fieldId || 0,
+            appType: implementation,
+            raw: rawCondStr
+          });
+        }
+      };
+
+      extractRules(condObj);
+    };
+
+    conditionFilters.forEach(cf => processItem(cf));
+    allFields.forEach(f => {
+      if (f.visibilityConditions || (f as any).visibilityCondition || f.visibilityConditionObject) processItem(f);
+    });
+
+    const hub: Record<string, Record<string, any[]>> = {};
+    list.forEach(item => {
+      if (!hub[item.source]) hub[item.source] = {};
+      const condKey = `${item.conditionOp} "${item.conditionVal}"`;
+      if (!hub[item.source][condKey]) hub[item.source][condKey] = [];
+      hub[item.source][condKey].push(item);
+    });
+
+    return { matrix: hub, rawRulesList: list };
+  }, [conditionFilters, allFields]);
+
   const stats = useMemo(() => {
     const total = allFields.length;
     const dlFields = allFields.filter((f) => isDropdownLike(f.fieldType));
     const missingOpts = dlFields.filter((f) => !f.options?.length);
-    const active = allFields.filter((f) => f.isActive);
-    const inactive = total - active.length;
-    return { total, dropdownLike: dlFields.length, missingOptions: missingOpts.length, active: active.length, inactive };
-  }, [allFields]);
+    
+    // Health Realism: Compare metadata with intake form
+    const intakeFieldNames = new Set<string>();
+    intakeGroups.forEach(g => g.sections?.forEach(s => s.fields?.forEach(f => {
+      if (f.fieldName) intakeFieldNames.add(f.fieldName.toLowerCase());
+      if (f.displayName) intakeFieldNames.add(f.displayName.toLowerCase());
+    })));
+
+    const activeInLeah = allFields.filter(f => 
+      intakeFieldNames.has((f.fieldName || "").toLowerCase()) || 
+      intakeFieldNames.has((f.fieldDisplayName || "").toLowerCase())
+    ).length;
+
+    const dormant = total - activeInLeah;
+    const interactive = dlFields.length;
+    const gaps = missingOpts.length;
+
+    return { total, activeInLeah, dormant, interactive, gaps };
+  }, [allFields, intakeGroups]);
 
   const uniqueTypes = useMemo(() => {
     const set = new Set(allFields.map((f) => (f.fieldType ?? "").toLowerCase()).filter(Boolean));
     return Array.from(set).sort();
   }, [allFields]);
 
-  // ── Influence Map (Impact Analysis) ──────────────────────────────────────
-  
   const influenceMap = useMemo(() => {
     const map: Record<number, number> = {};
     const processCond = (c: any) => {
-      const fid = parseInt(c?.conditionFieldId ?? c?.fieldId ?? (typeof c?.field === 'object' ? (c?.field as any)?.id : "") ?? "0", 10);
+      const fidStr = c?.conditionFieldId ?? c?.fieldId ?? (typeof c?.field === 'object' ? (c?.field as any)?.id : "") ?? "";
+      const fid = parseInt(fidStr, 10);
       if (fid && !isNaN(fid)) map[fid] = (map[fid] || 0) + 1;
     };
 
+    // Intake form rules
     intakeGroups.forEach(g => {
       g.sections?.forEach(s => {
         s.fields?.forEach(f => {
@@ -197,8 +900,16 @@ export default function MetadataManagerPage() {
         });
       });
     });
+
+    // Global condition filters rules
+    conditionFilters.forEach(cf => {
+      if (cf.visibilityConditionObject?.rules) {
+        cf.visibilityConditionObject.rules.forEach(processCond);
+      }
+    });
+
     return map;
-  }, [intakeGroups]);
+  }, [intakeGroups, conditionFilters]);
 
   const fields = useMemo(() => {
     const q = search.toLowerCase();
@@ -311,6 +1022,9 @@ export default function MetadataManagerPage() {
             <span className="ml-1.5 text-[9px] text-amber-400 opacity-80">(select app type)</span>
           )}
         </TabBtn>
+        <TabBtn active={tab === "rules"} onClick={() => setTab("rules")} icon={<Zap size={13} />}>
+          Rule Matrix
+        </TabBtn>
       </div>
 
       {/* Shared filters dashboard */}
@@ -396,7 +1110,7 @@ export default function MetadataManagerPage() {
               />
               <StatTile 
                 label="Health Status" 
-                value={stats.active} 
+                value={stats.activeInLeah} 
                 subtext="Active in Leah"
                 accent="green" 
                 onClick={() => setActiveFilter(activeFilter === "active" ? "all" : "active")} 
@@ -405,16 +1119,16 @@ export default function MetadataManagerPage() {
               />
               <StatTile 
                 label="Dormant Fields" 
-                value={stats.inactive} 
+                value={stats.dormant} 
                 subtext="Configuration Only"
-                accent={stats.inactive > 0 ? "amber" : "default"} 
+                accent={stats.dormant > 0 ? "amber" : "default"} 
                 onClick={() => setActiveFilter(activeFilter === "inactive" ? "all" : "inactive")} 
                 active={activeFilter === "inactive"} 
                 icon={<EyeOff size={14} />}
               />
               <StatTile 
                 label="Interactive Metadata" 
-                value={stats.dropdownLike} 
+                value={stats.interactive} 
                 subtext="Lists & Radios"
                 accent="blue" 
                 onClick={() => setTypeFilter(typeFilter !== "all" ? "all" : "dropdown")} 
@@ -423,10 +1137,10 @@ export default function MetadataManagerPage() {
               />
               <StatTile
                 label="Configuration Gaps"
-                value={stats.missingOptions}
+                value={stats.gaps}
                 subtext="Zero-option Dropdowns"
-                accent={stats.missingOptions > 0 ? "red" : "green"}
-                icon={stats.missingOptions > 0 ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                accent={stats.gaps > 0 ? "red" : "green"}
+                icon={stats.gaps > 0 ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
                 onClick={() => setShowMissingOnly((v) => !v)}
                 active={showMissingOnly}
               />
@@ -485,10 +1199,12 @@ export default function MetadataManagerPage() {
                   key={f.fieldId}
                   field={f}
                   influenceCount={influenceMap[f.fieldId] || 0}
+                  isNumeric={numericFields.some((nf: any) => nf.ctgFieldName === f.fieldName || nf.fieldName === f.fieldDisplayName)}
                   expanded={expandedIds.has(f.fieldId)}
                   onToggle={() => toggleExpand(f.fieldId)}
                   onEdit={() => openEdit(f)}
                   onDelete={() => setDeleteConfirm(f)}
+                  onInspect={(id) => setSelectedInspectorId(id)}
                   onAddOption={(value) => addOptMut.mutate({ fieldId: f.fieldId, value })}
                   onDeleteOption={(optId) => delOptMut.mutate(optId)}
                   addingOption={addOptMut.isPending}
@@ -506,6 +1222,26 @@ export default function MetadataManagerPage() {
           groups={intakeGroups}
           isLoading={intakeLoading}
           hasAppType={!!selAppTypeId}
+          simulationValues={simulationValues}
+          setSimulationValues={setSimulationValues}
+          ghostMode={ghostMode}
+          setGhostMode={setGhostMode}
+          onReset={resetSimulation}
+          allFields={allFields}
+          globalDictionary={globalDictionary}
+        />
+      )}
+
+      {/* ── CONDITION MATRIX TAB ── */}
+      {tab === "rules" && (
+        <ConditionMatrixPanel
+          matrix={matrix}
+          rawRulesList={rawRulesList}
+          selAppTypeId={selAppTypeId}
+          isLoading={isLoading || rulesLoading}
+          onRefresh={() => refetchRules()}
+          onInspect={(id) => setSelectedInspectorId(id)}
+          globalSearch={search}
         />
       )}
 
@@ -570,6 +1306,14 @@ export default function MetadataManagerPage() {
           </div>
         </div>
       )}
+      
+      {/* Blueprint Inspector Drawer */}
+      <BlueprintInspectorDrawer 
+        fieldId={selectedInspectorId} 
+        onClose={() => setSelectedInspectorId(null)} 
+        rawRules={rawRulesList}
+        allFields={allFields}
+      />
     </div>
   );
 }
@@ -583,13 +1327,28 @@ interface FieldRowProps {
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onInspect: (id: number) => void;
   onAddOption: (value: string) => void;
   onDeleteOption: (optionId: number) => void;
   addingOption: boolean;
   deletingOption: boolean;
+  isNumeric: boolean;
 }
 
-function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDelete, onAddOption, onDeleteOption, addingOption, deletingOption }: FieldRowProps) {
+function FieldRow({ 
+  field: f, 
+  influenceCount, 
+  isNumeric, 
+  expanded, 
+  onToggle, 
+  onEdit, 
+  onDelete, 
+  onInspect,
+  onAddOption, 
+  onDeleteOption, 
+  addingOption, 
+  deletingOption 
+}: FieldRowProps) {
   const [newOpt, setNewOpt] = useState("");
   const [showAddOpt, setShowAddOpt] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -611,7 +1370,8 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
     <div className={cn(
       "transition-all duration-300 relative overflow-hidden mb-1 mx-2 rounded-2xl border border-white/[0.05]",
       expanded ? "bg-white/[0.04] shadow-2xl ring-1 ring-primary/20" : "bg-white/[0.02] hover:bg-white/[0.05]",
-      isMissing && "ring-1 ring-red-500/20 bg-red-500/[0.02]"
+      isMissing && "ring-1 ring-red-500/20 bg-red-500/[0.02]",
+      !f.isActive && "opacity-50 grayscale-[0.5] filter hover:grayscale-0 hover:opacity-100"
     )}>
       {/* ── Visual Backdrop for highlight ── */}
       {influenceCount > 0 && (
@@ -639,6 +1399,11 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
             <span className={cn("text-[14px] font-bold tracking-tight", !f.isActive && "opacity-40")}>
                {f.fieldDisplayName || f.fieldName}
             </span>
+            {isNumeric && (
+              <span title="Financial Node" className="text-emerald-400 bg-emerald-400/10 p-1 rounded-md border border-emerald-400/20">
+                <DollarSign size={10} strokeWidth={3} />
+              </span>
+            )}
             {influenceCount > 0 && (
               <span className="text-[9px] font-black bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
                 <GitBranch size={8} /> Logic Driver ({influenceCount})
@@ -649,7 +1414,17 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
                 <AlertTriangle size={8} className="animate-pulse" /> Empty Control
               </span>
             )}
-            <span className="text-[9px] font-mono text-muted-foreground/20 ml-auto">#{f.fieldId}</span>
+            {!f.isActive && (
+              <Badge variant="outline" className="text-[8px] font-black bg-white/5 border-white/20 text-white/40 uppercase tracking-tighter">
+                 Deprecated / Suspended
+              </Badge>
+            )}
+            <button 
+              onClick={(e) => { e.stopPropagation(); onInspect(f.fieldId); }}
+              className="text-[9px] font-black font-mono text-muted-foreground/20 ml-auto hover:text-amber-400 transition-colors"
+            >
+              #{f.fieldId}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <p className="text-[10px] font-mono text-muted-foreground/40 lowercase max-w-[180px] truncate">{f.fieldName}</p>
@@ -661,7 +1436,7 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
           {needsOptions && optCount > 0 && !expanded && (
             <div className="mt-1.5 flex flex-wrap gap-1 items-center">
               <span className="text-[8px] font-black uppercase tracking-widest text-muted-foreground/20 mr-1 italic">Preview:</span>
-              {(f.options ?? []).slice(0, 50).map((o, idx) => (
+              {(f.options ?? []).slice(0, 50).map((o) => (
                 <span key={o.fieldOptionId} className="text-[9px] text-muted-foreground/40 bg-white/[0.03] px-1.5 py-0.5 rounded-md border border-white/5">
                   {o.fieldOptionValue}
                 </span>
@@ -695,8 +1470,10 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
           </div>
         </div>
 
-        {/* Actions Overlay */}
         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => onInspect(f.fieldId)} className="p-2 hover:bg-amber-500/10 rounded-xl transition-all text-muted-foreground hover:text-amber-400" title="Configuration Blueprint">
+            <BookOpen size={14} />
+          </button>
           <button onClick={onEdit} className="p-2 hover:bg-white/10 rounded-xl transition-all text-muted-foreground hover:text-primary">
             <Edit2 size={14} />
           </button>
@@ -743,14 +1520,28 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
                   <span className="text-muted-foreground/60 font-bold uppercase tracking-wider text-[9px]">Field Category</span>
                   <span className="text-primary font-bold">{f.fieldGroup || "Uncategorized"}</span>
                 </div>
-                {influenceCount > 0 && (
-                  <div className="pt-2 mt-2 border-t border-white/5">
-                    <p className="text-[10px] text-amber-400/80 leading-relaxed font-medium">
-                      This field determines the visibility of {influenceCount} other intake components.
-                    </p>
-                  </div>
-                )}
               </div>
+
+              {/* Guidance & Help Text */}
+              {(f.guidanceText || f.helpText) && (
+                <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl space-y-2">
+                   <p className="text-[9px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
+                      <Info size={10} /> Configuration Guidance
+                   </p>
+                   <div 
+                      className="text-[11px] text-amber-200/60 leading-relaxed italic rich-text-content"
+                      dangerouslySetInnerHTML={{ __html: f.guidanceText || f.helpText || "" }}
+                   />
+                </div>
+              )}
+
+              {influenceCount > 0 && (
+                <div className="bg-white/[0.02] p-4 rounded-2xl border border-white/5">
+                  <p className="text-[10px] text-amber-400/80 leading-relaxed font-medium">
+                    This field determines the visibility of {influenceCount} other intake components.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Column 3: Documentation & Guidance */}
@@ -773,9 +1564,7 @@ function FieldRow({ field: f, influenceCount, expanded, onToggle, onEdit, onDele
                 </div>
               </div>
             </div>
-
           </div>
-
           {/* Options Management Section */}
           {needsOptions && (
             <div className="mt-8 pt-6 border-t border-white/5">
@@ -1333,16 +2122,279 @@ function TabBtn({ children, active, onClick, icon }: {
   );
 }
 
+// ─── Logic Trigger Types & Row ────────────────────────────────────────────────
+
+interface TriggerStep {
+  fieldId: number;
+  name: string;
+  fieldType: string;
+  isOnForm: boolean;
+  currentValue: any;
+  isSatisfied: boolean;
+  unlocksCount: number;
+  options?: Record<string, string>;
+  suggestedValues: string[]; // Values extracted from downstream conditions — what value will actually unlock gated fields
+}
+
+/**
+ * Scans all intake fields' visibility conditions to find which values are expected
+ * for a given trigger field. Returns the unique set of target values.
+ */
+function extractConditionValues(triggerId: number, allIntakeF: IntakeFormField[]): string[] {
+  const vals = new Set<string>();
+
+  const processRule = (rule: any) => {
+    if (!rule || typeof rule !== 'object') return;
+    // Collect the field ID this rule targets
+    const rawId = rule.conditionFieldId ?? rule.fieldId ?? rule.field?.id ?? rule.id ?? "";
+    let s = String(rawId);
+    if (s.startsWith('F')) s = s.substring(1);
+    if (!isNaN(parseInt(s, 10)) && parseInt(s, 10) === triggerId) {
+      const v = rule.displayValue ?? rule.valueDisplay ?? rule.conditionValue
+        ?? rule.value ?? (rule.values?.[0]?.value) ?? rule.fieldValue ?? "";
+      const sv = String(v ?? "").trim();
+      if (sv) vals.add(sv);
+    }
+    if (Array.isArray(rule.rules)) rule.rules.forEach(processRule);
+  };
+
+  allIntakeF.forEach(f => {
+    // 1. Flat array conditions
+    if (Array.isArray((f as any).visibilityConditions)) {
+      (f as any).visibilityConditions.forEach((cond: any) => {
+        let fIdStr = String(cond.fieldId ?? cond.conditionFieldId ?? "");
+        if (fIdStr.startsWith('F')) fIdStr = fIdStr.substring(1);
+        if (parseInt(fIdStr, 10) === triggerId) {
+          const v = cond.fieldValue ?? cond.conditionValue ?? cond.value ?? cond.displayValue ?? "";
+          const sv = String(v ?? "").trim();
+          if (sv) vals.add(sv);
+        }
+      });
+    }
+    // 2. Object conditions
+    const logicObj = (f as any).visibilityConditionObject;
+    if (logicObj) processRule(logicObj);
+    // 3. Stringified / raw conditions
+    const raw = (f as any).visibilityConditions ?? (f as any).visibilityCondition;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) parsed.forEach(processRule); else processRule(parsed);
+        } catch {}
+      }
+    } else if (raw && typeof raw === 'object') {
+      processRule(raw);
+    }
+  });
+
+  return Array.from(vals);
+}
+
+function TriggerStepRow({
+  step, isActive, rank, simulationValues, setSimulationValues,
+}: {
+  step: TriggerStep;
+  isActive: boolean;
+  rank: number;
+  simulationValues: Record<number, any>;
+  setSimulationValues: (v: Record<number, any>) => void;
+}) {
+  const [expanded, setExpanded] = useState(isActive);
+  useEffect(() => { if (isActive) setExpanded(true); }, [isActive]);
+
+  const type = step.fieldType.toLowerCase();
+  const hasOpts = !!step.options && Object.keys(step.options).length > 0;
+
+  const handleClear = () => {
+    const n = { ...simulationValues };
+    delete n[step.fieldId];
+    setSimulationValues(n);
+  };
+
+  const handleAutoFill = () => {
+    const suggested = step.suggestedValues;
+    // Priority 1: use the exact value the downstream condition expects
+    if (suggested.length > 0) {
+      if (hasOpts && step.options) {
+        const keys = Object.keys(step.options!);
+        const valMap = Object.fromEntries(
+          Object.entries(step.options!).map(([k, v]) => [String(v).toLowerCase(), k])
+        );
+        for (const sv of suggested) {
+          // Match option by key (condition stores option ID)
+          if (keys.includes(sv)) { setSimulationValues({ ...simulationValues, [step.fieldId]: sv }); return; }
+          // Match option by label (condition stores display label)
+          const matched = valMap[sv.toLowerCase()];
+          if (matched) { setSimulationValues({ ...simulationValues, [step.fieldId]: matched }); return; }
+        }
+        // No exact match — just pick first option key
+        setSimulationValues({ ...simulationValues, [step.fieldId]: keys[0] });
+      } else {
+        // No options — use the expected condition value directly
+        setSimulationValues({ ...simulationValues, [step.fieldId]: suggested[0] });
+      }
+      return;
+    }
+    // Fallback: type-based sensible defaults
+    const val = hasOpts
+      ? Object.keys(step.options!)[0]
+      : type.includes("date") ? new Date().toISOString().split("T")[0]
+      : type.includes("number") || type.includes("currency") ? "1"
+      : "Yes";
+    setSimulationValues({ ...simulationValues, [step.fieldId]: val });
+  };
+
+  return (
+    <div className={cn(
+      "border-l-2 transition-all duration-300",
+      step.isSatisfied ? "border-l-emerald-500/50 bg-emerald-500/[0.025]" :
+      isActive ? "border-l-amber-400/80 bg-amber-500/[0.04]" :
+      "border-l-white/[0.04] hover:border-l-white/10 hover:bg-white/[0.01]"
+    )}>
+      <div className="flex items-start gap-3 px-4 py-3">
+        {/* Status bubble */}
+        <div className={cn(
+          "mt-0.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border transition-all",
+          step.isSatisfied
+            ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+            : isActive
+            ? "bg-amber-500/20 border-amber-500/40 text-amber-400 animate-pulse"
+            : "bg-white/[0.04] border-white/10 text-white/20"
+        )}>
+          {step.isSatisfied
+            ? <CheckCircle2 size={10} />
+            : isActive
+            ? <Zap size={9} />
+            : <span className="text-[9px] font-black">{rank}</span>
+          }
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {/* Name row */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={cn(
+              "text-[12px] font-semibold transition-colors",
+              step.isSatisfied ? "text-emerald-400" :
+              isActive ? "text-amber-300" : "text-white/50"
+            )}>{step.name}</span>
+
+            {!step.isOnForm && (
+              <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-400 tracking-widest">
+                Ghost Driver
+              </span>
+            )}
+            {step.unlocksCount > 0 && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md border transition-all",
+                step.isSatisfied
+                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400/70"
+                  : isActive
+                  ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                  : "bg-white/[0.03] border-white/[0.06] text-white/20"
+              )}>
+                <Unlock size={7} />
+                {step.unlocksCount} field{step.unlocksCount !== 1 ? "s" : ""}
+              </span>
+            )}
+            <span className="text-[8px] text-white/10 font-mono">#{step.fieldId}</span>
+          </div>
+
+          {/* Value display / input */}
+          {step.isSatisfied ? (
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] text-emerald-400/60 font-mono bg-emerald-500/5 border border-emerald-500/10 rounded-lg px-2 py-0.5 max-w-[220px] truncate">
+                "{step.options?.[String(step.currentValue)] ?? String(step.currentValue)}"
+              </span>
+              <button
+                onClick={handleClear}
+                className="text-[9px] text-muted-foreground/30 hover:text-rose-400 transition-colors"
+              >
+                × clear
+              </button>
+            </div>
+          ) : (expanded || isActive) ? (
+            <div className="mt-2 flex gap-2 items-center">
+              {hasOpts ? (
+                <select
+                  value={step.currentValue || ""}
+                  onChange={e => e.target.value && setSimulationValues({ ...simulationValues, [step.fieldId]: e.target.value })}
+                  className="flex-1 h-7 text-[11px] bg-black/30 border border-white/10 rounded-xl px-2 focus:outline-none focus:ring-1 focus:ring-amber-400/40 text-white appearance-none cursor-pointer"
+                >
+                  <option value="">— pick a value —</option>
+                  {Object.entries(step.options!).map(([k, v]) => (
+                    <option key={k} value={k} className="bg-zinc-900">{String(v) || k}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={type.includes("date") ? "date" : type.includes("number") || type.includes("currency") ? "number" : "text"}
+                  value={step.currentValue || ""}
+                  onChange={e => setSimulationValues({ ...simulationValues, [step.fieldId]: e.target.value })}
+                  placeholder={`Set ${step.name}…`}
+                  className="flex-1 h-7 text-[11px] bg-black/30 border border-white/10 rounded-xl px-2.5 focus:outline-none focus:ring-1 focus:ring-amber-400/40 text-white placeholder:text-white/20"
+                />
+              )}
+              <button
+                onClick={handleAutoFill}
+                className="h-7 px-3 text-[9px] font-black uppercase rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 transition-all flex-shrink-0 tracking-wider"
+              >
+                Auto
+              </button>
+            </div>
+          ) : (
+            <p className="text-[9px] text-white/20 mt-1">
+              Unlocks {step.unlocksCount} field{step.unlocksCount !== 1 ? "s" : ""} ·{" "}
+              <button
+                onClick={() => setExpanded(true)}
+                className="text-white/25 hover:text-amber-400 transition-colors underline underline-offset-2"
+              >
+                set value
+              </button>
+            </p>
+          )}
+        </div>
+
+        {/* Quick auto-fill for collapsed pending */}
+        {!step.isSatisfied && !isActive && !expanded && (
+          <button
+            onClick={handleAutoFill}
+            className="flex-shrink-0 mt-0.5 text-[8px] font-black uppercase text-white/15 hover:text-amber-400 border border-white/[0.06] hover:border-amber-500/30 px-2 py-1 rounded-lg transition-all"
+          >
+            Auto
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Intake Fields Panel ──────────────────────────────────────────────────────
 
 function IntakeFieldsPanel({
   groups,
   isLoading,
   hasAppType,
+  simulationValues,
+  setSimulationValues,
+  ghostMode,
+  setGhostMode,
+  onReset,
+  allFields,
+  globalDictionary,
 }: {
   groups: IntakeFormFieldGroup[];
   isLoading: boolean;
   hasAppType: boolean;
+  simulationValues: Record<number, any>;
+  setSimulationValues: (vals: Record<number, any>) => void;
+  ghostMode: boolean;
+  setGhostMode: (val: boolean) => void;
+  onReset: () => void;
+  allFields: FieldDefinition[];
+  globalDictionary: FieldDefinition[];
 }) {
   const [expandedFields, setExpandedFields] = useState<Set<number>>(new Set());
 
@@ -1354,11 +2406,136 @@ function IntakeFieldsPanel({
     });
   }
 
+  // Master Context: Flatten all groups/sections into a single field array for cross-logic resolution
+  const allIntakeFields = useMemo(() => {
+    return groups.flatMap(g => [
+      ...(g.fields ?? []),
+      ...(g.sections ?? []).flatMap(s => s.fields ?? [])
+    ]);
+  }, [groups]);
+
+  const triggers = useMemo(() => getLogicTriggers(groups), [groups]);
+
+  // Build interactive trigger steps — one entry per trigger field, sorted by impact
+  const triggerSteps = useMemo((): TriggerStep[] => {
+    const allIntakeF = groups.flatMap(g => [
+      ...(g.fields ?? []),
+      ...(g.sections ?? []).flatMap(s => s.fields ?? []),
+    ]);
+    const metaMap = new Map(
+      (globalDictionary.length > 0 ? globalDictionary : allFields || []).map(f => [f.fieldId, f])
+    );
+
+    return Array.from(triggers)
+      .map(triggerId => {
+        const onForm = allIntakeF.find(
+          f => parseInt(String(f.fieldId).replace("F", ""), 10) === triggerId
+        );
+        const meta = metaMap.get(triggerId);
+
+        // Count how many form fields are gated behind this trigger
+        const unlocksCount = allIntakeF.filter(f => {
+          const raw = (f as any).visibilityConditions
+            ?? (f as any).visibilityCondition
+            ?? (f as any).visibilityConditionObject;
+          if (!raw) return false;
+          const s = JSON.stringify(raw);
+          return (
+            s.includes(`"${triggerId}"`) ||
+            s.includes(`:${triggerId}`) ||
+            s.includes(`"F${triggerId}"`) ||
+            s.includes(`F${triggerId}"`)
+          );
+        }).length;
+
+        const name =
+          onForm?.displayName || onForm?.fieldName ||
+          meta?.fieldDisplayName || meta?.fieldName ||
+          `Field #${triggerId}`;
+
+        const rawOpts = onForm?.selectOptions ||
+          (meta?.options
+            ? Object.fromEntries(
+                meta.options.map(o => [
+                  (o as any).value ?? (o as any).id ?? "",
+                  (o as any).label ?? (o as any).value ?? "",
+                ])
+              )
+            : undefined);
+
+        const options = rawOpts && Object.keys(rawOpts).length > 0
+          ? (rawOpts as Record<string, string>)
+          : undefined;
+
+        const currentValue = simulationValues[triggerId];
+
+        // Extract what values downstream conditions actually expect from this trigger
+        const suggestedValues = extractConditionValues(triggerId, allIntakeF);
+
+        // isSatisfied: value is set AND it matches an expected condition value
+        // Handles both option-key matches (e.g. "2") and label matches (e.g. "No")
+        const cvStr = String(currentValue ?? "").trim();
+        const valueIsSet = currentValue !== undefined && currentValue !== null && cvStr !== "";
+        const isSatisfied = valueIsSet && (
+          suggestedValues.length === 0 // no expected values known — any non-empty value passes
+          || suggestedValues.some(sv => {
+              const svl = sv.toLowerCase();
+              if (svl === cvStr.toLowerCase()) return true; // direct key/value match
+              if (options) {
+                const label = String(options[cvStr] ?? "").toLowerCase();
+                return label === svl; // option label match (Leah sometimes stores label in condition)
+              }
+              return false;
+            })
+        );
+
+        return {
+          fieldId: triggerId,
+          name,
+          isOnForm: !!onForm,
+          fieldType: onForm?.fieldType ?? meta?.fieldType ?? "Text",
+          options,
+          currentValue,
+          isSatisfied,
+          unlocksCount,
+          suggestedValues,
+        };
+      })
+      // Most impactful (highest unlocks) first; stable sort — don't shuffle on fill
+      .sort((a, b) => b.unlocksCount - a.unlocksCount);
+  }, [triggers, groups, simulationValues, globalDictionary, allFields]);
+
+  const satisfiedCount = triggerSteps.filter(t => t.isSatisfied).length;
+
+  // Readiness Calculation
+  const stats = useMemo(() => {
+    let mandatoryTotal = 0;
+    let mandatoryFilled = 0;
+    groups.forEach(g => g.sections?.forEach(s => s.fields?.forEach(f => {
+      // Only count mandatory fields that are actually visible in the current logic state
+      if (f.isRequired && isFieldVisible(f, simulationValues)) {
+         mandatoryTotal++;
+         if (simulationValues[f.fieldId]) mandatoryFilled++;
+      }
+    })));
+    return { mandatoryTotal, mandatoryFilled, score: mandatoryTotal > 0 ? Math.round((mandatoryFilled/mandatoryTotal)*100) : 0 };
+  }, [groups, simulationValues]);
+
   if (!hasAppType) {
     return (
-      <div className="py-20 text-center text-muted-foreground">
-        <GitBranch size={32} className="mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Select an application type above to view its intake form fields.</p>
+      <div className="py-24 flex flex-col items-center justify-center text-center space-y-6">
+        <div className="relative">
+          <div className="absolute inset-0 bg-primary/30 blur-[100px] animate-pulse rounded-full" />
+          <div className="relative w-24 h-24 bg-primary/10 border border-primary/40 rounded-[2.5rem] flex items-center justify-center text-primary shadow-2xl backdrop-blur-3xl">
+            <GitBranch size={48} className="animate-in fade-in zoom-in duration-1000" />
+          </div>
+        </div>
+        <div className="space-y-3 max-w-sm">
+          <h3 className="text-2xl font-black text-white uppercase tracking-tight">Step 1: Initialize Context</h3>
+          <p className="text-sm text-muted-foreground/60 leading-relaxed">
+            Choose an application type from the dropdown at the top to initialize the <span className="text-primary font-bold">Simulator Flight Guide</span> and unlock the intake blueprint.
+          </p>
+        </div>
       </div>
     );
   }
@@ -1369,7 +2546,7 @@ function IntakeFieldsPanel({
 
   if (groups.length === 0) {
     return (
-      <div className="py-20 text-center text-sm text-muted-foreground">
+      <div className="py-20 text-center text-sm text-muted-foreground bg-white/[0.02] border border-white/5 rounded-3xl">
         No intake form field groups found for this application type.
       </div>
     );
@@ -1377,7 +2554,226 @@ function IntakeFieldsPanel({
 
   return (
     <div className="space-y-6">
-      {groups.map((group, gi) => {
+      {/* Simulation Toolbar */}
+      <div className="flex items-center justify-between p-5 bg-gradient-to-r from-white/[0.03] to-transparent border border-white/[0.08] rounded-[2rem] backdrop-blur-3xl mb-6 shadow-2xl">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-amber-500/20 rounded-xl shadow-inner border border-amber-500/20">
+                <Zap size={16} className="text-amber-400" />
+             </div>
+             <div>
+                <h5 className="text-[11px] font-black uppercase tracking-widest text-white">Simulator Protocol</h5>
+                <p className="text-[9px] text-muted-foreground/40 font-mono tracking-tighter">V4.0 - Active Propagation</p>
+             </div>
+          </div>
+          
+          <div className="h-10 w-px bg-white/10" />
+          
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+               <span className={cn(
+                  "text-[10px] font-black uppercase transition-colors px-2 py-0.5 rounded-md",
+                  stats.score === 100 ? "bg-emerald-500/20 text-emerald-400" : "bg-primary/20 text-primary"
+               )}>
+                  {stats.score}% READINESS
+               </span>
+               <div className="w-32 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                 <div 
+                    className={cn("h-full transition-all duration-1000", stats.score === 100 ? "bg-emerald-500" : "bg-primary")} 
+                    style={{ width: `${stats.score}%` }} 
+                 />
+               </div>
+            </div>
+            <p className="text-[9px] font-mono text-muted-foreground/60 tracking-tight">
+               <span className="text-white/40">{stats.mandatoryFilled}/{stats.mandatoryTotal}</span> MANDATORY CONSTRAINTS SATISFIED
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+           <button
+             onClick={() => setGhostMode(!ghostMode)}
+             className={cn(
+               "flex items-center gap-2 px-5 h-10 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all border shadow-lg",
+               ghostMode 
+                 ? "bg-primary/20 border-primary/40 text-primary shadow-primary/10" 
+                 : "bg-white/5 border-white/10 text-muted-foreground hover:bg-white/10 hover:text-white"
+             )}
+           >
+             <Eye size={14} className={cn(ghostMode && "animate-pulse")} />
+             {ghostMode ? "Ghost Mode ON" : "Ghost Mode OFF"}
+           </button>
+
+           <button
+             onClick={onReset}
+             className="flex items-center gap-2 px-5 h-10 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition-all shadow-lg"
+           >
+             <RefreshCw size={14} />
+             Reset Session
+           </button>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════
+           SIMULATOR FLIGHT GUIDE — Step-by-step interactive wizard
+          ══════════════════════════════════════════════════════════════ */}
+      <div className="space-y-3">
+
+        {/* ─ Step 1: Context Auto-Seeded ─ */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-emerald-500/[0.04] border border-emerald-500/20 rounded-2xl">
+          <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={11} className="text-emerald-400" />
+          </div>
+          <div className="flex-1">
+            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">
+              Step 1 — Context Auto-Seeded
+            </span>
+            <p className="text-[9px] text-muted-foreground/50 mt-0.5 leading-relaxed">
+              Core identity fields (Requester, Counterparty, Business Unit) were pre-filled on load to unlock high-level branching immediately.
+            </p>
+          </div>
+          <span className="text-[8px] font-black uppercase px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400/80 tracking-widest flex-shrink-0">
+            Ready
+          </span>
+        </div>
+
+        {/* ─ Step 2: Logic Triggers (main interactive section) ─ */}
+        <div className="border border-white/[0.07] rounded-2xl overflow-hidden bg-white/[0.015]">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-gradient-to-r from-amber-500/[0.06] to-transparent">
+            <div className="flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                <Zap size={11} className="text-amber-400" />
+              </div>
+              <span className="text-[10px] font-black text-amber-400 uppercase tracking-[0.2em]">Step 2 — Logic Triggers</span>
+              <div className={cn(
+                "flex items-center gap-1 px-2 py-0.5 rounded-full border text-[9px] font-black transition-all",
+                satisfiedCount === triggerSteps.length && triggerSteps.length > 0
+                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                  : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+              )}>
+                {satisfiedCount}/{triggerSteps.length}
+                <span className="text-[8px] opacity-60 font-normal ml-0.5">active</span>
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="flex items-center gap-2">
+              <div className="w-28 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-700",
+                    satisfiedCount === triggerSteps.length && triggerSteps.length > 0
+                      ? "bg-emerald-500" : "bg-amber-400"
+                  )}
+                  style={{ width: `${triggerSteps.length > 0 ? (satisfiedCount / triggerSteps.length) * 100 : 0}%` }}
+                />
+              </div>
+              {satisfiedCount === triggerSteps.length && triggerSteps.length > 0 && (
+                <span className="text-[9px] text-emerald-400 font-black uppercase tracking-widest">All clear</span>
+              )}
+            </div>
+          </div>
+
+          {/* Trigger steps list */}
+          {triggerSteps.length === 0 ? (
+            <div className="py-8 text-center">
+              <Circle size={20} className="mx-auto mb-2 text-white/10" />
+              <p className="text-[11px] text-muted-foreground/40 font-mono">No conditional logic detected for this form type.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-white/[0.04]">
+              {triggerSteps.map((step, idx) => {
+                const isActive = !step.isSatisfied &&
+                  triggerSteps.slice(0, idx).every(s => s.isSatisfied);
+                return (
+                  <TriggerStepRow
+                    key={step.fieldId}
+                    step={step}
+                    isActive={isActive}
+                    rank={idx + 1}
+                    simulationValues={simulationValues}
+                    setSimulationValues={setSimulationValues}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {/* Footer: fill all button */}
+          {triggerSteps.some(t => !t.isSatisfied) && (
+            <div className="px-4 py-2.5 border-t border-white/[0.05] flex items-center justify-between bg-white/[0.01]">
+              <span className="text-[9px] text-muted-foreground/30">
+                {triggerSteps.filter(t => !t.isSatisfied).length} trigger{triggerSteps.filter(t => !t.isSatisfied).length !== 1 ? "s" : ""} unset
+              </span>
+              <button
+                onClick={() => {
+                  const patch: Record<number, any> = {};
+                  triggerSteps.filter(t => !t.isSatisfied).forEach(t => {
+                    const type = t.fieldType.toLowerCase();
+                    // Use expected condition value if available
+                    if (t.suggestedValues.length > 0) {
+                      if (t.options) {
+                        const keys = Object.keys(t.options);
+                        const valMap = Object.fromEntries(
+                          Object.entries(t.options).map(([k, v]) => [String(v).toLowerCase(), k])
+                        );
+                        for (const sv of t.suggestedValues) {
+                          if (keys.includes(sv)) { patch[t.fieldId] = sv; break; }
+                          const matched = valMap[sv.toLowerCase()];
+                          if (matched) { patch[t.fieldId] = matched; break; }
+                        }
+                        if (patch[t.fieldId] === undefined) patch[t.fieldId] = keys[0];
+                      } else {
+                        patch[t.fieldId] = t.suggestedValues[0];
+                      }
+                    } else {
+                      patch[t.fieldId] = t.options
+                        ? Object.keys(t.options)[0]
+                        : type.includes("date")
+                        ? new Date().toISOString().split("T")[0]
+                        : type.includes("number") || type.includes("currency")
+                        ? "1"
+                        : "Yes";
+                    }
+                  });
+                  setSimulationValues({ ...simulationValues, ...patch });
+                }}
+                className="text-[9px] font-black uppercase text-amber-400/60 hover:text-amber-300 border border-amber-500/20 hover:border-amber-400/40 px-3 py-1 rounded-xl transition-all tracking-wider"
+              >
+                ⚡ Auto-fill remaining
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ─ Step 3: Logic Probe ─ */}
+        <div className="flex items-center gap-3 px-4 py-3 border border-white/[0.07] rounded-2xl bg-white/[0.015] hover:bg-white/[0.025] transition-all">
+          <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/25 flex items-center justify-center flex-shrink-0">
+            <Eye size={11} className="text-primary/70" />
+          </div>
+          <div className="flex-1">
+            <span className="text-[10px] font-black text-primary/80 uppercase tracking-[0.2em]">Step 3 — Logic Probe</span>
+            <p className="text-[9px] text-muted-foreground/50 mt-0.5 leading-relaxed">
+              Enable Ghost Mode to reveal all suppressed nodes. Grayed fields indicate conditions not yet met by current trigger values.
+            </p>
+          </div>
+          <button
+            onClick={() => setGhostMode(!ghostMode)}
+            className={cn(
+              "flex items-center gap-2 px-4 h-8 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] transition-all border flex-shrink-0",
+              ghostMode
+                ? "bg-primary/20 border-primary/40 text-primary"
+                : "bg-white/[0.04] border-white/10 text-muted-foreground hover:text-white hover:border-white/20"
+            )}
+          >
+            <Eye size={11} className={ghostMode ? "animate-pulse" : ""} />
+            {ghostMode ? "Ghost ON" : "Ghost OFF"}
+          </button>
+        </div>
+
+      </div>
+
+      {[...groups].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((group, gi) => {
         const allFields: IntakeFormField[] = (group.sections ?? []).flatMap((s) => s.fields ?? []);
 
         return (
@@ -1393,16 +2789,8 @@ function IntakeFieldsPanel({
                     {(group as any).groupName || (group as any).name || `Group ${gi + 1}`}
                   </h4>
                 </div>
-                {(group as any).groupType && (
-                  <span className="text-[10px] text-muted-foreground/40 font-mono tracking-widest uppercase">{(group as any).groupType}</span>
-                )}
-              </div>
-              <div className="text-right">
-                <span className="text-2xl font-black text-white/10 tabular-nums leading-none block">{allFields.length}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">Fields in Group</span>
               </div>
             </div>
-
             {/* Section labels */}
             <div className="p-2 space-y-2">
               {(group.sections ?? []).map((section, si) => (
@@ -1416,15 +2804,43 @@ function IntakeFieldsPanel({
                       <div className="h-px flex-1 bg-white/[0.05]" />
                     </div>
                   )}
-                  <div className="grid grid-cols-1 gap-1">
-                    {(section.fields ?? []).map((f) => (
-                      <IntakeFieldRow
-                        key={f.fieldId}
-                        field={f}
-                        expanded={expandedFields.has(f.fieldId)}
-                        onToggle={() => toggleField(f.fieldId)}
-                      />
-                    ))}
+                  <div className="grid grid-cols-1 gap-2 p-4">
+                    {(() => {
+                      const fields = section.fields ?? [];
+                      const visibleFields = fields.filter(f => isFieldVisible(f, simulationValues));
+                      const showPlaceholder = visibleFields.length === 0 && !ghostMode;
+
+                      if (showPlaceholder && fields.length > 0) {
+                        return (
+                          <div className="py-10 text-center bg-white/[0.01] border border-dashed border-white/5 rounded-3xl group/empty">
+                             <EyeOff size={24} className="mx-auto mb-3 text-muted-foreground/10 group-hover/empty:scale-110 transition-transform" />
+                             <p className="text-[10px] text-muted-foreground/40 font-black uppercase tracking-widest">Section Hidden by Logic</p>
+                             <p className="text-[9px] text-muted-foreground/20 mt-1 max-w-[180px] mx-auto leading-relaxed">
+                               This blueprint context currently suppresses these {fields.length} fields. Check Triggers above to unlock.
+                             </p>
+                          </div>
+                        );
+                      }
+
+                      return fields.map((f, fi) => {
+                        const visible = isFieldVisible(f, simulationValues);
+                        if (!visible && !ghostMode) return null;
+                        
+                        return (
+                          <IntakeFieldRow
+                            key={`${gi}-${si}-${fi}-${f.fieldId}`}
+                            field={f}
+                            simulationValues={simulationValues}
+                            setSimulationValues={setSimulationValues}
+                            isGhost={!visible}
+                            expanded={expandedFields.has(f.fieldId)}
+                            onToggle={() => toggleField(f.fieldId)}
+                            allFields={allIntakeFields}
+                            globalDictionary={globalDictionary}
+                          />
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               ))}
@@ -1437,8 +2853,24 @@ function IntakeFieldsPanel({
   );
 }
 
-function IntakeFieldRow({ field: f, expanded, onToggle }: {
-  field: IntakeFormField; expanded: boolean; onToggle: () => void;
+function IntakeFieldRow({
+  field: f,
+  expanded,
+  onToggle,
+  simulationValues,
+  setSimulationValues,
+  isGhost,
+  allFields,
+  globalDictionary,
+}: {
+  field: IntakeFormField;
+  expanded: boolean;
+  onToggle: () => void;
+  simulationValues: Record<number, any>;
+  setSimulationValues: (vals: Record<number, any>) => void;
+  isGhost?: boolean;
+  allFields: FieldDefinition[];
+  globalDictionary: FieldDefinition[];
 }) {
   const tc = typeColor(f.fieldType ?? (f as any).type ?? "");
   const ft = f.fieldType ?? (f as any).type ?? "";
@@ -1459,55 +2891,44 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
   const selectOptCount = f.selectOptions ? Object.keys(f.selectOptions).length : 0;
 
   return (
-    <div className="bg-card group">
-      <div
-        className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors"
-        onClick={onToggle}
-      >
-        <ChevronDown
-          size={12}
-          className={cn("text-muted-foreground/40 flex-shrink-0 transition-transform", expanded && "rotate-180")}
+    <div className={cn(
+      "rounded-3xl border transition-all duration-500 overflow-hidden",
+      isGhost 
+        ? "bg-white/[0.01] border-white/5 opacity-40 grayscale saturate-0" 
+        : "bg-white/[0.03] border-white/10 hover:border-white/20 shadow-xl shadow-black/20"
+    )}>
+      <div className="p-6 space-y-6">
+        <SimulatedField
+          field={f}
+          value={simulationValues[f.fieldId]}
+          onChange={(val) => setSimulationValues({ ...simulationValues, [f.fieldId]: val })}
+          isGhost={isGhost}
+          isMandatory={f.isRequired}
         />
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={cn("text-sm font-medium", (f as any).isActive === false && "opacity-50 line-through")}>
-               {f.displayName || f.fieldName}
-            </span>
-            {f.isRequired && (
-              <span className="text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Required</span>
-            )}
-            {(f as any).isReadOnly && (
-              <span className="text-[9px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">Read-only</span>
-            )}
-            {!f.isVisible && (
-              <span className="text-[9px] text-muted-foreground bg-muted border border-border px-1.5 py-0.5 rounded">Hidden</span>
-            )}
-            {hasConditions && (
-              <span className="inline-flex items-center gap-0.5 text-[9px] text-violet-400 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">
-                <GitBranch size={8} /> {conditions.length} condition{conditions.length !== 1 ? "s" : ""}
+        
+        <div className="flex items-center justify-between pt-4 border-t border-white/5">
+           <button 
+             onClick={onToggle}
+             className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 hover:text-primary transition-colors flex items-center gap-1.5"
+           >
+             <GitBranch size={12} />
+             {hasConditions ? `${conditions.length} Logic Conditions` : "Static Field"}
+             <ChevronDown size={10} className={cn("transition-transform", expanded && "rotate-180")} />
+           </button>
+           
+           <div className="flex items-center gap-3">
+              <span className={cn("text-[9px] font-mono px-2 py-0.5 rounded border uppercase", tc.bg, tc.text, tc.border)}>
+                {ft}
               </span>
-            )}
-          </div>
-          <p className="text-[10px] font-mono text-muted-foreground/50">{f.fieldName} · #{f.fieldId}</p>
+              <button
+                onClick={() => { navigator.clipboard.writeText(String(f.fieldId)); toast.success(`Copied #${f.fieldId}`); }}
+                className="p-1.5 text-muted-foreground/30 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                title="Copy ID"
+              >
+                <Copy size={12} />
+              </button>
+           </div>
         </div>
-
-        {ft && (
-          <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded border flex-shrink-0", tc.bg, tc.text, tc.border)}>
-            {ft}
-          </span>
-        )}
-
-        {selectOptCount > 0 && (
-          <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">{selectOptCount} opts</span>
-        )}
-
-        <button
-          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(String(f.fieldId)); toast.success(`Copied #${f.fieldId}`); }}
-          className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-foreground rounded transition-all"
-        >
-          <Copy size={11} />
-        </button>
       </div>
 
       {/* Expanded: details + conditions */}
@@ -1571,7 +2992,16 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
                     if (ex.trim()) { valStr2 = ex; break; }
                   }
                   const condKey = `cond-${ci}-${rawFieldIdStr}-${operatorRaw}-${valStr2.slice(0,8)}`;
-                  return <ConditionCard key={condKey} cond={cond} ci={ci} />;
+                  return (
+                    <ConditionCard 
+                      key={condKey} 
+                      cond={cond} 
+                      ci={ci} 
+                      simulationValues={simulationValues}
+                      allFields={allFields}
+                      globalDictionary={globalDictionary}
+                    />
+                  );
                 })}
               </div>
               <p className="text-[9px] text-muted-foreground/40 mt-1.5">
@@ -1591,7 +3021,19 @@ function IntakeFieldRow({ field: f, expanded, onToggle }: {
 
 // ─── Condition Card ───────────────────────────────────────────────────────────
 
-function ConditionCard({ cond, ci }: { cond: any; ci: number }) {
+function ConditionCard({ 
+  cond, 
+  ci, 
+  simulationValues,
+  allFields,
+  globalDictionary
+}: { 
+  cond: any; 
+  ci: number;
+  simulationValues: Record<number, any>;
+  allFields: FieldDefinition[];
+  globalDictionary: FieldDefinition[];
+}) {
   const [showRaw, setShowRaw] = useState(false);
 
   const logicalOp = String(cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : ""));
@@ -1613,6 +3055,62 @@ function ConditionCard({ cond, ci }: { cond: any; ci: number }) {
   const operatorStr = operatorRaw.toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
   const NO_VAL_OPS = ['ISNOTNULL','ISNULL','IS NOT NULL','IS NULL','IS EMPTY','IS NOT EMPTY','IS_NOT_NULL','IS_NULL','EXISTS','NOT EXISTS','NOT_NULL','NULL'];
   const operatorNeedsNoValue = NO_VAL_OPS.some(op => operatorStr.replace(/\s/g,'').includes(op.replace(/\s/g,'')));
+
+  // NEW: Logic Audit Evaluation
+  const fIdInt = parseInt(fieldId, 10);
+  const actualValue = simulationValues[fIdInt];
+  
+  let targetVal = "";
+  const candidates: any[] = [cond?.valueDisplay, cond?.displayValue, cond?.conditionValue, cond?.value, cond?.val];
+  for (const c of candidates) {
+    if (c === null || c === undefined) continue;
+    targetVal = String(c);
+    if (targetVal) break;
+  }
+  
+  const isMet = evaluateCondition(actualValue, operatorRaw, targetVal);
+
+  // Name Resolution via Dictionary
+  const resolvedField = (globalDictionary.length > 0 ? globalDictionary : allFields).find(f => f.fieldId === fIdInt);
+  const finalName = resolvedField?.fieldDisplayName || resolvedField?.fieldName || fieldName;
+
+  return (
+    <div className={cn(
+      "p-3 rounded-2xl border transition-all mb-1",
+      isMet 
+        ? "bg-emerald-500/5 border-emerald-500/10 text-emerald-400/70" 
+        : "bg-rose-500/5 border-rose-500/10 text-rose-400/70"
+    )}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "w-2 h-2 rounded-full",
+            isMet ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]" : "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]"
+          )} />
+          <span className="text-[10px] font-black uppercase tracking-wider text-white/80">{finalName}</span>
+        </div>
+        <Badge className={cn("text-[8px] uppercase font-black px-1.5 py-0", isMet ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")}>
+          {isMet ? "Rule Met" : "Logic Failed"}
+        </Badge>
+      </div>
+
+      <div className="flex items-center gap-2 text-[10px] bg-black/20 p-2 rounded-lg border border-white/5">
+        <span className="opacity-40 font-mono italic">{operatorStr}</span>
+        <span className="font-bold text-white">"{targetVal || "NULL"}"</span>
+        
+        <div className="ml-auto flex items-center gap-1.5 border-l border-white/10 pl-3">
+          <span className="text-[9px] opacity-30 uppercase font-black">Current:</span>
+          <span className={cn("font-mono font-bold", isMet ? "text-emerald-400" : "text-rose-400")}>
+            {actualValue === undefined || actualValue === null ? "EMPTY" : `"${actualValue}"`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Deprecated old card logic below (keeping for context if needed, but the return above handles it)
+function ConditionCardOld({ cond, ci }: { cond: any; ci: number }) {
 
   let valStr = "";
   if (!operatorNeedsNoValue) {
@@ -1941,3 +3439,4 @@ function FieldTreePanel({ fields, isLoading, isGlobalMode, appTypeName, hasAppTy
     </div>
   );
 }
+

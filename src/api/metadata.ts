@@ -90,12 +90,26 @@ export async function getFieldById(
   const f = raw;
   return {
     ...f,
-    fieldId:         f.fieldId ?? f.id ?? id,
-    fieldDisplayName:f.fieldDisplayName ?? f.displayName ?? f.fieldName ?? "",
-    fieldType:       f.fieldType ?? f.fieldTypeName ?? "",
-    fieldTypeId:     f.fieldTypeId ?? undefined,
-    isRequired:      f.isRequired ?? f.isMandatoryField ?? false,
-    isMandatoryField:f.isMandatoryField ?? f.isRequired ?? false,
+    fieldId:            f.fieldId ?? f.id ?? id,
+    fieldDisplayName:   f.fieldDisplayName ?? f.displayName ?? f.fieldName ?? "",
+    fieldType:          f.fieldType ?? f.fieldTypeName ?? "",
+    fieldTypeId:        f.fieldTypeId ?? undefined,
+    fieldGroupId:       f.fieldGroupId ?? undefined,
+    isRequired:         f.isRequired ?? f.isMandatoryField ?? false,
+    isMandatoryField:   f.isMandatoryField ?? f.isRequired ?? false,
+    isActive:           f.isActive ?? true,
+    isVisible:          f.isVisible ?? false,
+    isVisibleOnRequestDetails: f.isVisibleOnRequestDetails ?? false,
+    displayInRequestJourney:   f.displayInRequestJourney ?? false,
+    displayInRequestDetails:   f.displayInRequestDetails ?? false,
+    guidanceText:              f.guidanceText ?? "",
+    comments:                  f.comments ?? "",
+    defaultValue:              f.defaultValue ?? null,
+    metadataExtractionPromptId: f.metadataExtractionPromptId ?? null,
+    calculatedFieldUnit:       f.calculatedFieldUnit ?? 0,
+    calculationOutputDecimals: f.calculationOutputDecimals ?? null,
+    decimalPointNumber:        f.decimalPointNumber ?? null,
+    applicationTypeMandatoryData: f.applicationTypeMandatoryData ?? [],
     options: (f.options ?? []).map((o: any) => ({
       fieldOptionId:      o.fieldOptionId ?? o.id ?? 0,
       fieldOptionValue:   o.fieldOptionValue ?? o.value ?? "",
@@ -203,4 +217,48 @@ export async function listLegalPartyFields(
     },
   });
   return res.data;
+}
+
+/**
+ * Fetch condition filters (visibility rules) for metadata fields.
+ */
+export async function getConditionFilters(
+  client: AxiosInstance,
+  tenant: string
+): Promise<any[]> {
+  const res = await client.get(`api/${tenant}/v1/condition-filters`, {
+    params: {
+      skipLoadingFieldOptions: true,
+      showAllKLO: false,
+      forRequestStatus: true
+    }
+  });
+  return res.data?.data ?? res.data ?? [];
+}
+
+/**
+ * Fetch the master list of field types and their IDs.
+ */
+export async function getMetaDataFieldTypes(
+  client: AxiosInstance,
+  tenant: string
+): Promise<any[]> {
+  const res = await client.get(`api/${tenant}/v1/applicationTypeMetaData/metaDataFieldType/list`, {
+    params: { metaDataTypeId: "ApplicationTypeRequestForm" }
+  });
+  return res.data?.data ?? res.data ?? [];
+}
+
+/**
+ * Fetch the list of fields specifically identified as numeric/currency.
+ */
+export async function getNumericCustomFields(
+  client: AxiosInstance,
+  tenant: string,
+  requestorUsername: string
+): Promise<any[]> {
+  const res = await client.get(`api/${tenant}/v1/applicationtypemetadata/getnumericcustomfields`, {
+    params: { requestorUsername }
+  });
+  return res.data?.data ?? res.data ?? [];
 }

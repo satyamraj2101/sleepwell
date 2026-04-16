@@ -23,13 +23,13 @@ export function createAuthClient(cloudInstance: string): AxiosInstance {
  * Old Prod API client — users, roles, departments, applicationtype, snapshot
  * Target: https://{cloudInstance}/cpaimt_api/api/{tenant}/...
  */
-export function createOldProdClient(cloudInstance: string, token: string): AxiosInstance {
+export function createOldProdClient(cloudInstance: string, token: string, tenant: string): AxiosInstance {
   const instance = axios.create({
     baseURL: `https://${cloudInstance}/cpaimt_api`,
     headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
       "Authorization": `Bearer ${token}`,
+      "Tenant": tenant,
+      "x-tenant-name": tenant,
     },
   });
   addTokenExpiryInterceptor(instance);
@@ -41,13 +41,13 @@ export function createOldProdClient(cloudInstance: string, token: string): Axios
  * New Cloud API client — contracts, metadata, legal-party, etc.
  * Target: https://{newCloudApi}/api/{tenant}/...
  */
-export function createNewCloudClient(newCloudApi: string, token: string): AxiosInstance {
+export function createNewCloudClient(newCloudApi: string, token: string, tenant: string): AxiosInstance {
   const instance = axios.create({
     baseURL: `https://${newCloudApi}`,
     headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
       "Authorization": `Bearer ${token}`,
+      "Tenant": tenant,
+      "x-tenant-name": tenant,
     },
   });
   addTokenExpiryInterceptor(instance);
@@ -123,11 +123,11 @@ export class LeahForbiddenError extends LeahApiError {
 // ─── Hook to get typed API clients from current store state ──────────────────
 export function useApiClients() {
   const store = useAuthStore.getState();
-  const { cloudInstance, newCloudApi, token } = store;
+  const { cloudInstance, newCloudApi, token, tenant } = store;
   if (!token) throw new LeahAuthError("Not connected. Open settings to connect.");
   return {
-    oldProd: createOldProdClient(cloudInstance, token),
-    newCloud: createNewCloudClient(newCloudApi, token),
+    oldProd: createOldProdClient(cloudInstance, token, tenant),
+    newCloud: createNewCloudClient(newCloudApi, token, tenant),
   };
 }
 

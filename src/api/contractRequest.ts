@@ -375,3 +375,70 @@ export async function generateContractVersion(
   );
   return res.data;
 }
+
+/**
+ * Upload a contract file as a version/document for a given Request ID.
+ * Based on the observed multipart/form-data payload.
+ */
+export async function uploadContractFile(
+  client: AxiosInstance,
+  tenant: string,
+  payload: {
+    RequestId: number;
+    File: File;
+    RequestorUsername: string;
+    IsContractVersion?: boolean;
+    DocumentType?: number;
+    OriginalFileNames?: string;
+  }
+): Promise<{ message: string }> {
+  const formData = new FormData();
+  formData.append("RequestId", String(payload.RequestId));
+  formData.append("file", payload.File); // Doc says lowercase 'file'
+  formData.append("RequestorUsername", payload.RequestorUsername);
+  formData.append("IsContractVersion", String(payload.IsContractVersion ?? true));
+  formData.append("DocumentType", String(payload.DocumentType ?? 1));
+  formData.append("Title", payload.OriginalFileNames ?? payload.File.name); // Doc says 'Title'
+  formData.append("IsChildRequest", "false");
+  formData.append("IsDescriptor", "false");
+  formData.append("isApprovalOverride", "false");
+  formData.append("IsAttachmentUploadComplete", "true");
+  formData.append("IsFinalSignedCopy", "false");
+  formData.append("Comment", "");
+
+  const res = await client.post<{ message: string }>(
+    `/api/${tenant}/v1/contractfile/upload`,
+    formData
+  );
+  return res.data;
+}
+
+/**
+ * Fetch applicable templates for a given request context.
+ * Uses the oldProd client as per the v1.9 contractTemplate endpoint.
+ */
+export async function getApplicableTemplates(
+  client: AxiosInstance,
+  tenant: string,
+  params: { 
+    applicationTypeId: number; 
+    requestId: number; 
+    requestType?: number; 
+  }
+): Promise<any[]> {
+  const res = await client.get(`/api/${tenant}/v1/contractTemplate`, {
+    params: {
+      "filter.applicationTypeId": params.applicationTypeId,
+      "filter.requestId": params.requestId,
+      "filter.RequestType": params.requestType ?? 1,
+    },
+  });
+  
+  // Response can be [ { ... } ] or { data: [ { ... } ] }
+  const root = res.data;
+  const list = Array.isArray(root?.data) ? root.data : 
+              (Array.isArray(root?.results) ? root.results : 
+              (Array.isArray(root) ? root : []));
+              
+  return list;
+}

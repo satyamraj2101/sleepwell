@@ -10,14 +10,15 @@ export function useApiClients() {
   const token = useAuthStore((s) => s.token);
   const cloudInstance = useAuthStore((s) => s.cloudInstance);
   const newCloudApi = useAuthStore((s) => s.newCloudApi);
+  const tenant = useAuthStore((s) => s.tenant);
 
   return useMemo(() => {
     if (!token) return null;
     return {
-      oldProd: createOldProdClient(cloudInstance, token),
-      newCloud: createNewCloudClient(newCloudApi, token),
+      oldProd: createOldProdClient(cloudInstance, token, tenant),
+      newCloud: createNewCloudClient(newCloudApi, token, tenant),
     };
-  }, [token, cloudInstance, newCloudApi]);
+  }, [token, cloudInstance, newCloudApi, tenant]);
 }
 
 export function useRequiredClients() {

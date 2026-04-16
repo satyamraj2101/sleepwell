@@ -63,6 +63,7 @@ export interface IntakeFormField {
   fieldId: number;
   fieldName: string;
   displayName: string;
+  ctgFieldName?: string;   // e.g. "F600072"
   fieldType: string;       // "Text", "Dropdown", "Date", "RadioButton", "Number", "MultilineText"
   isRequired: boolean;
   isVisible: boolean;
@@ -70,6 +71,7 @@ export interface IntakeFormField {
   selectOptions: Record<string, string> | null; // { "optionValue": "Display Label" }
   values?: Array<{ value: string; label: string }>;
   visibilityConditions?: VisibilityCondition[];
+  visibilityCondition?: string | null; // Leah raw logic string
 }
 
 export interface VisibilityCondition {
@@ -281,6 +283,7 @@ export interface FieldDefinition {
   fieldId: number;
   fieldName: string;
   fieldDisplayName: string;
+  ctgFieldName?: string;
   fieldType: string;
   fieldTypeId?: number;
   applicationTypeId: number;
@@ -297,9 +300,20 @@ export interface FieldDefinition {
   displayInRequestDetails?: boolean;
   isForAllApplicationTypes?: boolean;
   helpText?: string;
+  guidanceText?: string;
   comments?: string;
   fieldGroup?: string;
+  fieldGroupId?: number;
   defaultValue?: string;
+  metadataExtractionPromptId?: number | null;
+  calculatedFieldUnit?: number;
+  calculationOutputDecimals?: number | null;
+  decimalPointNumber?: number | null;
+  applicationTypeMandatoryData?: Array<{
+    applicationTypeId: number;
+    isMandatory: boolean;
+    fieldId: number;
+  }>;
   options?: FieldOption[];
 }
 
@@ -311,6 +325,14 @@ export interface FieldOption {
   parentId: number | null;
   numericValue: number | null;
   fieldOptionOrderId: number;
+}
+
+export interface FieldConditionRule {
+  ctgFieldName: string;
+  type: string;
+  question: string | null;
+  visibilityCondition: string | null;
+  items: any[];
 }
 
 export interface CreateFieldOptionPayload {

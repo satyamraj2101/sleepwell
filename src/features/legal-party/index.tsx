@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Edit2, Trash2, Copy, Building2, Loader2, Upload } from "lucide-react";
+import { Plus, Edit2, Trash2, Copy, Building2, Loader2, Upload, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ export default function LegalPartyPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<LegalParty | null | "new">(null);
   const [csvProgress, setCsvProgress] = useState<{ done: number; total: number } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const clients = useApiClients();
@@ -66,6 +67,66 @@ export default function LegalPartyPage() {
   const handleBulkDelete = () => {
     if (!window.confirm(`Delete ${selected.size} legal parties?`)) return;
     bulkDeleteMut.mutate(Array.from(selected));
+  };
+
+  const handleCsvExport = async () => {
+    if (!clients) return;
+    try {
+      setIsExporting(true);
+      toast.loading("Preparing system export…", { id: "export-csv" });
+
+      // Step 1: Get total count
+      const firstPage = await listLegalParties(clients.newCloud, tenant, { pageNo: 1, perPage: 1 });
+      const total = firstPage.totalRecords;
+
+      if (total === 0) {
+        toast.error("No legal parties to export.", { id: "export-csv" });
+        setIsExporting(false);
+        return;
+      }
+
+      // Step 2: Fetch all in chunks of 500
+      let allParties: LegalParty[] = [];
+      const chunkSize = 500;
+      const totalPages = Math.ceil(total / chunkSize);
+
+      for (let i = 1; i <= totalPages; i++) {
+        toast.loading(`Fetching chunk ${i}/${totalPages}…`, { id: "export-csv" });
+        const res = await listLegalParties(clients.newCloud, tenant, { pageNo: i, perPage: chunkSize });
+        allParties = [...allParties, ...res.data];
+      }
+
+      // Step 3: Convert and download
+      toast.loading("Generating CSV…", { id: "export-csv" });
+      const csv = Papa.unparse(allParties.map((p) => ({
+        ID: p.legalPartyId,
+        Name: p.name,
+        "Registration Number": p.registrationNumber,
+        "Place of Registration": p.placeOfRegistration,
+        City: p.city,
+        State: p.state,
+        "Zip Code": p.zipCode,
+        Country: p.countryName || p.countryId,
+        Description: p.description,
+        Active: p.isActive ? "Yes" : "No",
+      })));
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `legal_parties_all_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = "hidden";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success(`Exported ${allParties.length} records`, { id: "export-csv" });
+    } catch (e) {
+      toast.error(`Export failed: ${(e as Error).message}`, { id: "export-csv" });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleCsvImport = (file: File) => {
@@ -116,6 +177,10 @@ export default function LegalPartyPage() {
                 <Trash2 size={13} />Delete {selected.size}
               </Button>
             )}
+            <Button size="sm" variant="outline" onClick={handleCsvExport} disabled={isExporting} className="gap-1.5">
+              {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              Export All
+            </Button>
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="gap-1.5">
               <Upload size={13} />Import CSV
             </Button>
@@ -213,11 +278,13 @@ export default function LegalPartyPage() {
       )}
 
       {/* Pagination */}
-      {(data?.totalRecords ?? 0) > 50 && (
-        <div className="flex justify-center gap-2 mt-4">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <span className="text-sm text-muted-foreground self-center">Page {page}</span>
-          <Button variant="outline" size="sm" disabled={parties.length < 50} onClick={() => setPage((p) => p + 1)}>Next</Button>
+      {data?.totalRecords && data.totalRecords > 50 && (
+        <div className="flex justify-center gap-2 mt-4 pb-8">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => { setPage((p) => p - 1); setPage(page - 1); }}>Previous</Button>
+          <span className="text-sm font-medium self-center bg-muted px-3 py-1 rounded-md min-w-[100px] text-center">
+             {page} / {Math.ceil(data.totalRecords / 50)}
+          </span>
+          <Button variant="outline" size="sm" disabled={page * 50 >= data.totalRecords} onClick={() => { setPage((p) => p + 1); setPage(page + 1); }}>Next</Button>
         </div>
       )}
 

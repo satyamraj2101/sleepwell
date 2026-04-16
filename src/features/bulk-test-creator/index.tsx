@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   FlaskConical, CheckCircle2, Trash2, Play, AlertCircle, Download, Import,
-  XCircle, Loader2, Plus, Edit2, X, Search, Clock,
+  XCircle, Loader2, Plus, Edit2, X, Search, Clock, Upload as LucideUpload,
   Copy, ExternalLink, CheckSquare, Square, AlertTriangle, RotateCcw, Eye,
   FileText, Users, Shield, ChevronDown, ChevronUp, Settings as SettingsIcon, Layers,
+  DollarSign
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { Spinner } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
 import { useAuthStore } from "@/store/authStore";
 import { QK, cn } from "@/lib/utils";
-import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, getQuestionnaire, submitQuestionnaire } from "@/api/contractRequest";
+import { getIntakeFormFields, createContract, getContractDetail, updateContract, buildUpdatePayload, getQuestionnaire, submitQuestionnaire, uploadContractFile, getApplicableTemplates } from "@/api/contractRequest";
 import { getContractTemplates } from "@/api/applicationTypes";
 import { getSnapshotApprovals } from "@/api/approval";
 import { listUsers, fetchAllUsers, listRoles } from "@/api/users";
@@ -70,6 +71,10 @@ interface TestRun {
   selectedTemplateName?: string;
   requestId?: number;
   recordId?: number | string;
+  // Versioning
+  versionStrategy: "generate" | "upload";
+  uploadedFile?: File | null;
+  customFileName?: string;
   generatedVersionId?: number;  // versionId from version-history after run
   generatedFileName?: string;
   status: RunStatus;
@@ -125,19 +130,28 @@ function isMandatory(f: FlatField): boolean {
 }
 
 function dummyValue(field: FlatField, fallbackOpts?: Record<string, string> | null): string {
-  const ft = (field.fieldType ?? "").toLowerCase().replace(/\s/g, "");
+  // Use official fieldTypeId mapping first (v1.9 masters)
+  const tid = field.fieldTypeId;
 
   // 1. Explicit options — use first key's label
   const opts = (field.selectOptions && Object.keys(field.selectOptions).length > 0)
     ? field.selectOptions
     : (fallbackOpts && Object.keys(fallbackOpts).length > 0 ? fallbackOpts : null);
+    
   if (opts) {
     const v = opts[Object.keys(opts)[0]];
     return (v as string) || Object.keys(opts)[0];
   }
   if (field.values?.length) return field.values[0].label || field.values[0].value;
 
-  // 2. Types that need real IDs / file handles
+  // 2. Exact Type Handling (using fieldTypeId from Leah v1.9 snippets)
+  if (tid === 7 || tid === 30) return new Date().toISOString().split("T")[0]; // Date, DateTime
+  if (tid === 4 || tid === 5 || tid === 22) return "42"; // Number, Currency, Calculated
+  if (tid === 25) return "test.run@example.com"; // Email
+  
+  // 3. String-based fallback for types without mapped IDs
+  const ft = (field.fieldType ?? "").toLowerCase().replace(/\s/g, "");
+
   if (ft.includes("lookup") || ft.includes("entity") || ft.includes("reference") ||
       ft.includes("user") || ft.includes("autocomplete") || ft.includes("guid") ||
       ft.includes("department")) return field.isRequired ? "1" : "";
@@ -145,13 +159,11 @@ function dummyValue(field: FlatField, fallbackOpts?: Record<string, string> | nu
   if (ft.includes("table") || ft.includes("file") || ft.includes("attachment") ||
       ft.includes("upload")) return "";
 
-  // 3. Select-like types without loaded options — skip (arbitrary value rejected)
   if (ft.includes("dropdown") || ft.includes("radio") || ft.includes("checkbox") ||
       ft.includes("multiselect") || ft.includes("select") || ft.includes("picklist")) {
     return field.isRequired ? "Auto Test Value" : "";
   }
 
-  // 4. Typed free-entry fields
   if (ft.includes("date")) return new Date().toISOString().split("T")[0];
   if (ft.includes("number") || ft.includes("integer") || ft.includes("decimal") ||
       ft.includes("numeric") || ft.includes("currency") || ft.includes("money") ||
@@ -160,7 +172,6 @@ function dummyValue(field: FlatField, fallbackOpts?: Record<string, string> | nu
   if (ft.includes("phone") || ft.includes("tel")) return "+1-555-000-0000";
   if (ft.includes("url") || ft.includes("link") || ft.includes("website")) return "https://example.com";
 
-  // 5. Anything else (text, shorttext, multilinetext, textarea, string, etc.) → text
   return "Auto Test Value";
 }
 
@@ -572,6 +583,7 @@ function RunCard({
   run, allFields, cloudInstance, liveClients, liveParties,
   onRun, onDelete, onToggleEdit,
   onFieldChange, onClientChange, onPartyChange,
+  onVersionStrategyChange, onFileChange, onCustomFileNameChange,
   onSaveAndRerun, onViewContract, onPreviewDoc, onPreviewVersion, onESignTest, isRunningAll,
   newCloudApi, lookups
 }: {
@@ -586,6 +598,9 @@ function RunCard({
   onFieldChange: (fieldId: string, value: string) => void;
   onClientChange: (id: number | null) => void;
   onPartyChange: (id: number | null) => void;
+  onVersionStrategyChange: (strategy: "generate" | "upload") => void;
+  onFileChange: (file: File | null) => void;
+  onCustomFileNameChange: (name: string) => void;
   onSaveAndRerun: () => void;
   onViewContract: () => void;
   onPreviewDoc: () => void;
@@ -1067,6 +1082,64 @@ function RunCard({
           </div>
           <div className="px-5 py-5 max-h-[500px] overflow-y-auto space-y-6 custom-scrollbar">
 
+            {/* Versioning Strategy Override */}
+            <div className="pb-6 border-b border-white/[0.03] space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText size={14} className="text-blue-400" />
+                  <span className="text-[11px] font-black uppercase tracking-[0.1em] text-foreground/80">Strategy: {run.versionStrategy === "generate" ? "Auto Generation" : "Manual Upload"}</span>
+                </div>
+                <div className="flex bg-black/40 p-0.5 rounded-lg border border-white/5 shadow-inner">
+                  <button 
+                    onClick={() => onVersionStrategyChange("generate")}
+                    className={cn(
+                      "px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all",
+                      run.versionStrategy === "generate" ? "bg-blue-500/20 text-blue-400 shadow-sm" : "text-muted-foreground/40 hover:text-muted-foreground"
+                    )}
+                  >
+                    Generate
+                  </button>
+                  <button 
+                    onClick={() => onVersionStrategyChange("upload")}
+                    className={cn(
+                      "px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all",
+                      run.versionStrategy === "upload" ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-muted-foreground/40 hover:text-muted-foreground"
+                    )}
+                  >
+                    Upload
+                  </button>
+                </div>
+              </div>
+
+              {run.versionStrategy === "upload" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="space-y-2">
+                    <label className="text-label block">Legacy Contract File <span className="text-red-400 font-black">*</span></label>
+                    <label className="flex items-center gap-3 w-full h-9 bg-amber-500/5 border border-dashed border-amber-500/20 rounded-xl px-3 cursor-pointer hover:bg-amber-500/10 transition-all group">
+                      <LucideUpload size={14} className={cn("transition-colors", run.uploadedFile ? "text-amber-400" : "text-white/20 group-hover:text-amber-500/50")} />
+                      <span className="text-xs font-bold truncate flex-1">
+                        {run.uploadedFile ? run.uploadedFile.name : <span className="text-white/30">Select docx/pdf...</span>}
+                      </span>
+                      <input 
+                        type="file" className="hidden" 
+                        onChange={e => onFileChange(e.target.files?.[0] || null)} 
+                        accept=".docx,.pdf"
+                      />
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-label block">Version Display Name</label>
+                    <Input 
+                      placeholder="e.g. Executed_Legacy_Contract"
+                      value={run.customFileName || ""}
+                      onChange={e => onCustomFileNameChange(e.target.value)}
+                      className="h-9 text-xs bg-white/5 border border-white/10 rounded-xl px-3 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Client & Party overrides per run */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-6 border-b border-white/[0.03]">
               <div className="space-y-2">
@@ -1159,6 +1232,11 @@ export default function BulkTestCreatorPage() {
   const [globalPartyId, setGlobalPartyId] = useState<number | null>(null);
   const [importInput, setImportInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+
+  // Versioning Global Config
+  const [globalVersionStrategy, setGlobalVersionStrategy] = useState<"generate" | "upload">("generate");
+  const [globalFile, setGlobalFile] = useState<File | null>(null);
+  const [globalCustomFileName, setGlobalCustomFileName] = useState("");
 
   // eSign Setup State
   const [includeSignature, setIncludeSignature] = useState(false);
@@ -1353,6 +1431,31 @@ export default function BulkTestCreatorPage() {
     staleTime: 5 * 60_000,
   });
 
+  // ── Rule-Based Metadata Enhancements ──
+  const { data: conditionFilters = [] } = useQuery({
+    queryKey: ["conditionFilters", tenant],
+    queryFn: () => getConditionFilters(clients!.oldProd, tenant),
+    enabled: !!clients && !!tenant,
+    staleTime: 30 * 60_000,
+  });
+
+  const { data: numericFields = [] } = useQuery({
+    queryKey: ["numericFields", tenant, username],
+    queryFn: () => getNumericCustomFields(clients!.oldProd, tenant, username!),
+    enabled: !!clients && !!username,
+    staleTime: 30 * 60_000,
+  });
+
+  const { data: masterFieldTypes = [] } = useQuery({
+    queryKey: ["masterFieldTypes", tenant],
+    queryFn: () => getMetaDataFieldTypes(clients!.oldProd, tenant),
+    enabled: !!clients && !!tenant,
+    staleTime: 24 * 3600_000, // 24h
+  });
+
+  const [applyRules, setApplyRules] = useState(false);
+  const [showConditionLogic, setShowConditionLogic] = useState(false);
+
   // Expanded Lookups
   const { data: fetchUsers = [] } = useQuery({
     queryKey: ["lookupUsers", tenant],
@@ -1468,11 +1571,21 @@ export default function BulkTestCreatorPage() {
     function pushField(f: any, groupName: string, groupType: string, sectionName: string) {
       if (!f.fieldId || seen.has(f.fieldId)) return;
       seen.add(f.fieldId);
+
+      // Rule Integration
+      const rule = conditionFilters.find((r: any) => 
+        r.ctgFieldName === f.ctgFieldName || 
+        (r.question && r.question === f.displayName)
+      );
+
       const mergedOpts = (f.selectOptions && Object.keys(f.selectOptions).length > 0)
         ? f.selectOptions
         : (metaOptsMap[f.fieldId] ?? f.selectOptions ?? null);
+
       out.push({ 
         ...f, 
+        ctgFieldName: rule?.ctgFieldName || f.ctgFieldName,
+        visibilityCondition: rule?.visibilityCondition || f.visibilityCondition,
         selectOptions: mergedOpts, 
         groupName, 
         groupType, 
@@ -1497,15 +1610,26 @@ export default function BulkTestCreatorPage() {
     return out;
   }, [intakeGroups, metaOptsMap]);
 
-  // Fields filtered by search for sidebar display
+  // Fields filtered by search + visibility rules for sidebar display
   const filteredFields = useMemo(() => {
-    if (!fieldSearch.trim()) return allFields;
+    let list = allFields;
+
+    // Optional Rule application
+    if (applyRules) {
+      // Basic rule parser: hide if condition exists and depends on ##jt fields
+      // Simplification: We hide fields that have a visibilityCondition starting with (##jt
+      // indicating they are dynamic.
+      list = list.filter(f => !f.visibilityCondition || !f.visibilityCondition.includes("##jt"));
+    }
+
+    if (!fieldSearch.trim()) return list;
     const q = fieldSearch.toLowerCase();
-    return allFields.filter(f =>
+    return list.filter(f =>
       (f.displayName || f.fieldName)?.toLowerCase().includes(q) ||
-      f.fieldType?.toLowerCase().includes(q)
+      f.fieldType?.toLowerCase().includes(q) ||
+      f.ctgFieldName?.toLowerCase().includes(q)
     );
-  }, [allFields, fieldSearch]);
+  }, [allFields, fieldSearch, applyRules]);
 
   // Recompute global values when fields/fillMode changes
   useEffect(() => {
@@ -1664,6 +1788,9 @@ export default function BulkTestCreatorPage() {
       selectedClientId: prepareClientId,
       selectedPartyId: globalPartyId,
       editOpen: false,
+      versionStrategy: globalVersionStrategy,
+      uploadedFile: globalFile,
+      customFileName: globalCustomFileName,
       includeSignature,
       esignSignatories: [...signatories],
       esignSubject,
@@ -1734,49 +1861,85 @@ export default function BulkTestCreatorPage() {
       }
 
       // Step 2: Version Generation + History
-      // Explicitly trigger document generation via API, then fetch version history.
-      const effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
+      // Strategy choice: Generate from Template OR Upload Legacy File
       patchStep(run.id, "version", { status: "running" });
       const tg = Date.now();
 
-      if (effectiveTemplateId) {
-        // Step 2a: Document Generation via Official Questionnaire API
-        // Spec Page 182 & 193
-        try {
-          const qData = await getQuestionnaire(clients.oldProd, tenant, {
-            contractTemplateId: effectiveTemplateId,
-            applicationTypeId: selAppTypeId!,
-            requestorUsername: username,
-          });
+      if (latestRun.versionStrategy === "upload") {
+        // Option B: Manual File Upload
+        if (!latestRun.uploadedFile) throw new Error("No file selected for upload strategy");
+        
+        await uploadContractFile(clients.oldProd, tenant, {
+          RequestId: Number(requestId),
+          File: latestRun.uploadedFile,
+          RequestorUsername: username,
+          OriginalFileNames: latestRun.customFileName || latestRun.uploadedFile.name,
+          IsContractVersion: true,
+          DocumentType: 1
+        });
+        
+        await new Promise(r => setTimeout(r, 1000)); // Brief pause for processing
+      } else {
+        // Option A: Auto-generate via Questionnaire (Existing logic)
+        let effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
 
-          // Map our run-specific field values into the questionnaire schema
-          if (qData && qData.fields) {
-            qData.fields.forEach((f: any) => {
-              // Priority mapping: ctgFieldName (F123), backendTag (123), fieldId
-              const tagId = f.backendTag || f.fieldId || (f.ctgFieldName ? f.ctgFieldName.slice(1) : null);
-              const ourVal = latestRun.fieldValues[String(tagId)];
-              if (ourVal) {
-                f.value = ourVal;
-              } else if (f.mandatory && !f.value) {
-                f.value = "Auto Test Value";
-              }
+        // Auto-select template if none specified
+        if (!effectiveTemplateId && latestRun.versionStrategy === "generate") {
+          patchStep(run.id, "version", { result: "Auto-detecting template...", status: "running" });
+          try {
+            const applicable = await getApplicableTemplates(clients.oldProd, tenant, {
+              applicationTypeId: latestRun.appTypeId,
+              requestId: Number(requestId),
+              requestType: 1
             });
+            if (applicable && applicable.length > 0) {
+              const detected = applicable[0];
+              effectiveTemplateId = detected.contractTemplateId;
+              const templateName = detected.contractTemplateName || detected.name;
+              patchRun(run.id, { 
+                selectedTemplateId: effectiveTemplateId,
+                selectedTemplateName: templateName
+              });
+              patchStep(run.id, "version", { result: `Detected: ${templateName}` });
+            } else {
+              throw new Error("No applicable template found for current metadata");
+            }
+          } catch (e) {
+            throw new Error(`Template detection failed: ${(e as Error).message}`);
           }
+        }
 
-          await submitQuestionnaire(clients.oldProd, tenant, {
-            ApplicationTypeId: selAppTypeId!,
-            ContractTemplateId: effectiveTemplateId,
-            RequestId: Number(requestId),
-            IsAI: false,
-            TemplateJson: JSON.stringify(qData),
-            requestorUsername: username,
-          });
+        if (effectiveTemplateId) {
+          try {
+            const qData = await getQuestionnaire(clients.oldProd, tenant, {
+              contractTemplateId: effectiveTemplateId,
+              applicationTypeId: selAppTypeId!,
+              requestorUsername: username,
+            });
 
-          await new Promise(r => setTimeout(r, 1500)); // Optimized wait
-        } catch (err) {
-          console.error("Document generation (Questionnaire) failed", err);
-          // Non-blocking for history check
-          await new Promise(r => setTimeout(r, 1000));
+            if (qData && qData.fields) {
+              qData.fields.forEach((f: any) => {
+                const tagId = f.backendTag || f.fieldId || (f.ctgFieldName ? f.ctgFieldName.slice(1) : null);
+                const ourVal = latestRun.fieldValues[String(tagId)];
+                if (ourVal) f.value = ourVal;
+                else if (f.mandatory && !f.value) f.value = "Auto Test Value";
+              });
+            }
+
+            await submitQuestionnaire(clients.oldProd, tenant, {
+              ApplicationTypeId: selAppTypeId!,
+              ContractTemplateId: effectiveTemplateId,
+              RequestId: Number(requestId),
+              IsAI: false,
+              TemplateJson: JSON.stringify(qData),
+              requestorUsername: username,
+            });
+
+            await new Promise(r => setTimeout(r, 1500));
+          } catch (err) {
+            console.error("Document generation failed", err);
+            await new Promise(r => setTimeout(r, 1000));
+          }
         }
       }
 
@@ -2197,9 +2360,13 @@ export default function BulkTestCreatorPage() {
                     <select
                       value={selTemplateId ?? ""}
                       onChange={e => setSelTemplateId(e.target.value ? Number(e.target.value) : null)}
-                      className="w-full h-9 text-sm bg-background border border-amber-500/30 rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                      disabled={globalVersionStrategy === "upload"}
+                      className={cn(
+                        "w-full h-9 text-sm bg-background border border-amber-500/30 rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition-all",
+                        globalVersionStrategy === "upload" && "opacity-50 cursor-not-allowed grayscale"
+                      )}
                     >
-                      <option value="">— Each run picks its own template —</option>
+                      <option value="">— Auto-Detect by Rules —</option>
                       {templates.map(t => (
                         <option key={t.contractTemplateId || t.id} value={t.contractTemplateId || t.id}>
                           {t.contractTemplateName || t.name}
@@ -2245,6 +2412,65 @@ export default function BulkTestCreatorPage() {
                   <option value="">None</option>
                   {liveParties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+              </div>
+
+              {/* Versioning Strategy Global */}
+              <div className="pt-2 border-t border-white/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText size={12} className="text-blue-400" />
+                    <span className="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Default Versioning</span>
+                  </div>
+                  <div className="flex bg-black/40 p-0.5 rounded-lg border border-white/5 shadow-inner">
+                    <button 
+                      onClick={() => setGlobalVersionStrategy("generate")}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+                        globalVersionStrategy === "generate" ? "bg-blue-500/20 text-blue-400 shadow-sm" : "text-muted-foreground/40 hover:text-muted-foreground"
+                      )}
+                    >
+                      Gen
+                    </button>
+                    <button 
+                      onClick={() => setGlobalVersionStrategy("upload")}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+                        globalVersionStrategy === "upload" ? "bg-amber-500/20 text-amber-400 shadow-sm" : "text-muted-foreground/40 hover:text-muted-foreground"
+                      )}
+                    >
+                      Upload
+                    </button>
+                  </div>
+                </div>
+
+                {globalVersionStrategy === "upload" && (
+                  <div className="space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 rounded-xl space-y-2">
+                      <label className="flex flex-col items-center justify-center w-full min-h-[60px] border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group">
+                        <div className="flex flex-col items-center justify-center pt-2 pb-2">
+                          <LucideUpload size={14} className={cn("mb-1 transition-colors", globalFile ? "text-amber-500" : "text-white/20 group-hover:text-amber-500/50")} />
+                          <p className="text-[10px] font-bold text-center px-2 truncate max-w-[200px]">
+                            {globalFile ? globalFile.name : <span className="text-white/30">Click to upload legacy doc</span>}
+                          </p>
+                        </div>
+                        <input 
+                          type="file" className="hidden" 
+                          onChange={e => setGlobalFile(e.target.files?.[0] || null)} 
+                          accept=".docx,.pdf"
+                        />
+                      </label>
+                      <Input 
+                        placeholder="Custom Version Name (Optional)"
+                        value={globalCustomFileName}
+                        onChange={e => setGlobalCustomFileName(e.target.value)}
+                        className="h-7 text-[10px] bg-black/40 border-white/5 focus-visible:ring-amber-500/30"
+                      />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground/60 italic leading-tight">
+                      This file will be used as the primary document version for all prepared test runs.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Electronic Signature Configuration */}
@@ -2453,12 +2679,41 @@ export default function BulkTestCreatorPage() {
                 ))}
               </div>
 
-              {/* Mode description */}
               <div className="px-4 py-2 text-[10px] text-muted-foreground/70 border-b border-white/5 italic">
                 {fillMode === "mandatory" && `Fills ${mandatoryCount} required fields automatically.`}
                 {fillMode === "all" && `Fills all ${allFields.length} fields automatically.`}
                 {fillMode === "custom" && "Search and pick which fields to include."}
               </div>
+
+              {/* Advanced Rule settings */}
+              {selAppTypeId && (
+                <div className="p-4 space-y-2 border-b border-white/5 bg-white/[0.02]">
+                  <label className="flex items-center justify-between gap-3 group/toggle cursor-pointer">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-foreground/80 uppercase tracking-widest leading-none">Apply Rule Logic</span>
+                      <span className="text-[9px] text-muted-foreground/50 mt-1">Dynamic visibility per Leah rules</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="accent-primary h-3 w-3 rounded" 
+                      checked={applyRules} 
+                      onChange={e => setApplyRules(e.target.checked)} 
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 group/toggle cursor-pointer pt-1">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-foreground/80 uppercase tracking-widest leading-none">Show Rule Logic</span>
+                      <span className="text-[9px] text-muted-foreground/50 mt-1">Show raw Leah logic strings</span>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      className="accent-primary h-3 w-3 rounded" 
+                      checked={showConditionLogic} 
+                      onChange={e => setShowConditionLogic(e.target.checked)} 
+                    />
+                  </label>
+                </div>
+              )}
 
               {/* Field list */}
               {intakeLoading ? (
@@ -2488,6 +2743,7 @@ export default function BulkTestCreatorPage() {
                       const isChecked = fillMode === "all" ? true : fillMode === "mandatory" ? mandatory : customSelected.has(id);
                       const val = globalValues[id] ?? "";
                       const hasOptions = !!(f.selectOptions && Object.keys(f.selectOptions).length > 0) || !!(f.values?.length);
+                      const isNumeric = numericFields.some(nf => nf.ctgFieldName === f.ctgFieldName || (nf.fieldName && nf.fieldName === f.displayName));
 
                       return (
                         <div key={id} className={cn(
@@ -2516,11 +2772,35 @@ export default function BulkTestCreatorPage() {
                                 isChecked ? "bg-primary shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-white/20"
                               )} />
                             )}
-                            <span className="text-[11px] font-semibold flex-1 min-w-0 truncate leading-none">
-                              {f.displayName || f.fieldName}
-                              {mandatory && <span className="text-red-400 ml-1 font-bold">*</span>}
+                            <div className="flex-1 min-w-0 flex flex-col">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="text-[11px] font-semibold truncate leading-none">
+                                  {f.displayName || f.fieldName}
+                                  {mandatory && <span className="text-red-400 ml-1 font-bold">*</span>}
+                                </span>
+                                {isNumeric && (
+                                  <span title="Financial Field (Automated Highlighting)" className="text-emerald-400/80">
+                                    <DollarSign size={10} />
+                                  </span>
+                                )}
+                                {f.visibilityCondition && (
+                                  <span 
+                                    title={`Rule: ${f.visibilityCondition}`}
+                                    className={cn("text-amber-400/80", showConditionLogic && "bg-amber-400/10 px-1 rounded-[2px] border border-amber-400/20")}
+                                  >
+                                    <FlaskConical size={10} strokeWidth={3} />
+                                  </span>
+                                )}
+                              </div>
+                              {showConditionLogic && f.visibilityCondition && (
+                                <span className="text-[7px] font-mono text-amber-500/50 mt-0.5 truncate bg-amber-500/5 px-1 py-0.5 rounded border border-white/5 max-w-[150px]">
+                                  {f.visibilityCondition}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[8px] font-bold text-muted-foreground/30 uppercase tracking-tighter flex-shrink-0 px-1.5 py-0.5 rounded border border-white/5 bg-white/5">
+                              {f.ctgFieldName || f.fieldType}
                             </span>
-                            <span className="text-[8px] font-bold text-muted-foreground/30 uppercase tracking-tighter flex-shrink-0 px-1.5 py-0.5 rounded border border-white/5 bg-white/5">{f.fieldType}</span>
                           </div>
 
                           {/* Value editor (shown when selected) */}
@@ -2639,6 +2919,9 @@ export default function BulkTestCreatorPage() {
               onPreviewDoc={() => run.generatedVersionId && setPreviewVersion({ versionId: run.generatedVersionId, fileName: run.generatedFileName ?? "" })}
               onPreviewVersion={(versionId, fileName) => setPreviewVersion({ versionId, fileName })}
               onESignTest={() => handleESignTest(run)}
+              onVersionStrategyChange={s => patchRun(run.id, { versionStrategy: s })}
+              onFileChange={f => patchRun(run.id, { uploadedFile: f })}
+              onCustomFileNameChange={n => patchRun(run.id, { customFileName: n })}
               lookups={lookups}
             />
           ))}
