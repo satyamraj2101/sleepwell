@@ -38,9 +38,9 @@ import { FieldEditorDrawer } from "./components/FieldEditorDrawer";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const METADATA_TYPES = [
-  { id: 1, name: "Contract" },
-  { id: 2, name: "Legal Party" },
-  { id: 3, name: "Client" },
+  { id: 1, name: "Request Form" },
+  { id: 2, name: "Partner Type" },
+  { id: 3, name: "User Type" },
   { id: 4, name: "Other (4)" },
   { id: 8, name: "Other (8)" },
   { id: 9, name: "Other (9)" },
@@ -545,7 +545,7 @@ export default function MetadataManagerPage() {
     queryKey: QK.appTypes(tenant),
     queryFn: async () => {
       const { listApplicationTypes } = await import("@/api/applicationTypes");
-      return listApplicationTypes(clients!.oldProd, tenant, tenant);
+      return listApplicationTypes(clients!.oldProd, tenant, username);
     },
     enabled: !!clients,
     staleTime: 5 * 60_000,
@@ -582,9 +582,9 @@ export default function MetadataManagerPage() {
   });
 
   const { data: _numericFields = [], error: numericError } = useQuery({
-    queryKey: ["numericFields", tenant, username],
+    queryKey: ["numericFields", tenant, "system"],
     queryFn: () => getNumericCustomFields(clients!.oldProd, tenant, username),
-    enabled: !!clients && !!username,
+    enabled: !!clients && !!tenant && !!username,
     staleTime: 30 * 60_000,
   });
 
@@ -710,7 +710,38 @@ export default function MetadataManagerPage() {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: fieldQueryKey });
+  const invalidate = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["fieldDefs", tenant] }),
+      qc.invalidateQueries({ queryKey: ["conditionFilters", tenant] }),
+      qc.invalidateQueries({ queryKey: ["appTypes", tenant] }),
+      qc.invalidateQueries({ queryKey: ["numericFields", tenant] }),
+    ]);
+  };
+
+  const syncCacheLocally = (payload: any) => {
+    const id = payload.id || payload.fieldId;
+    if (!id) return;
+
+    // 1. Update Field Definitions
+    qc.setQueriesData({ queryKey: ["fieldDefs", tenant] }, (old: any) => {
+      if (!old?.data) return old;
+      return {
+        ...old,
+        data: old.data.map((f: any) => (f.fieldId === id ? { ...f, ...payload } : f))
+      };
+    });
+
+    // 2. Update Condition Filters (Triggers)
+    qc.setQueriesData({ queryKey: ["conditionFilters", tenant] }, (old: any) => {
+      const list = Array.isArray(old) ? old : old?.data || [];
+      const newList = list.map((f: any) => {
+        const fId = f.id || f.fieldId || f.applicationTypeMetaDataId;
+        return (fId === id || f.fieldName === payload.fieldName) ? { ...f, ...payload } : f;
+      });
+      return Array.isArray(old) ? newList : { ...old, data: newList };
+    });
+  };
 
   const addOptMut = useMutation({
     mutationFn: (v: { fieldId: number; value: string; isDefault?: boolean }) =>
@@ -734,8 +765,8 @@ export default function MetadataManagerPage() {
 
   const delFieldMut = useMutation({
     mutationFn: (id: number) => deleteFieldDefinition(clients!.newCloud, tenant, id),
-    onSuccess: () => {
-      invalidate();
+    onSuccess: async () => {
+      await invalidate();
       setDeleteConfirm(null);
       toast.success("Field deleted");
     },
@@ -744,13 +775,25 @@ export default function MetadataManagerPage() {
 
   const createFieldMut = useMutation({
     mutationFn: (payload: AddUpdateFieldPayload) => createFieldDefinition(clients!.newCloud, tenant, payload),
-    onSuccess: () => { invalidate(); setPanel("none"); setEditingField(null); toast.success("Field created"); },
+    onSuccess: async (data, variables) => { 
+      syncCacheLocally(variables);
+      await invalidate(); 
+      setPanel("none"); 
+      setEditingField(null); 
+      toast.success("Field created"); 
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
   const updateFieldMut = useMutation({
     mutationFn: (payload: AddUpdateFieldPayload) => updateFieldDefinition(clients!.newCloud, tenant, payload),
-    onSuccess: () => { invalidate(); setPanel("none"); setEditingField(null); toast.success("Field updated"); },
+    onSuccess: async (data, variables) => { 
+      syncCacheLocally(variables);
+      await invalidate(); 
+      setPanel("none"); 
+      setEditingField(null); 
+      toast.success("Field updated"); 
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -928,7 +971,7 @@ export default function MetadataManagerPage() {
   }, [intakeGroups, conditionFilters]);
 
   const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
-  const [_bulkEditingFields, setBulkEditingFields] = useState<FieldDefinition[]>([]);
+  const [bulkEditingFields, setBulkEditingFields] = useState<FieldDefinition[]>([]);
 
   const fields = useMemo(() => {
     const q = search.toLowerCase();
@@ -1130,6 +1173,42 @@ export default function MetadataManagerPage() {
                 <AlertTriangle size={12} className="animate-bounce" /> Missing options only
               </button>
             )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() => {
+                      toast.promise(invalidate(), {
+                        loading: "Synchronizing dictionary...",
+                        success: "Dictionary synchronized",
+                        error: "Sync failed",
+                      });
+                    }}
+                    variant="outline"
+                    className="h-10 w-10 p-0 border-white/10 bg-white/5 hover:bg-white/10 rounded-xl transition-all group"
+                  >
+                    <RefreshCw 
+                      size={16} 
+                      className={cn(
+                        "text-primary transition-transform duration-700",
+                        qc.isFetching() > 0 && "animate-spin"
+                      )} 
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="bg-neutral-900 border-white/10 text-[10px] font-black uppercase tracking-widest text-primary">
+                  Sync Dictionary
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <Button
+              onClick={resetAllFilters}
+              variant="outline"
+              className="h-10 px-4 border-white/10 bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all"
+            >
+              Reset Filters
+            </Button>
           </>
         )}
       </div>
@@ -1269,8 +1348,13 @@ export default function MetadataManagerPage() {
 
       <FieldEditorDrawer
         field={editingField}
+        bulkFields={bulkEditingFields}
         isOpen={panel === "edit" || panel === "create"}
-        onClose={() => { setPanel("none"); setEditingField(null); }}
+        onClose={() => { 
+          setPanel("none"); 
+          setEditingField(null); 
+          setBulkEditingFields([]); 
+        }}
         onSave={(payload) => {
           if (panel === "create") {
             createFieldMut.mutate(payload);
@@ -1278,7 +1362,53 @@ export default function MetadataManagerPage() {
             updateFieldMut.mutate(payload);
           }
         }}
-        availableFields={allFields}
+        onBulkSave={async (ids, updates) => {
+          toast.loading(`Synchronizing ${ids.length} fields...`, { id: "bulk-save" });
+          try {
+            for (const id of ids) {
+              const originalField = allFields.find(f => f.fieldId === id);
+              if (!originalField) continue;
+
+              const payload: any = {
+                ...originalField,
+                ...updates,
+                id: id,
+                fieldId: id,
+                applicationId: originalField.applicationId || 77,
+                isActive: (updates.isActive ?? originalField.isActive) ? 1 : 0,
+                isMandatoryField: updates.isMandatoryField !== undefined ? updates.isMandatoryField : !!originalField.isMandatoryField,
+                isVisible: (updates.isVisible ?? originalField.isVisible) !== false ? 1 : 0,
+                applicationTypeIds: Array.isArray(originalField.applicationTypeIds) 
+                   ? originalField.applicationTypeIds.map(Number)
+                   : [],
+                applicationTypeMandatoryData: (originalField.applicationTypeIds || []).map(atId => ({
+                   applicationTypeId: Number(atId),
+                   isMandatory: updates.isMandatoryField !== undefined ? updates.isMandatoryField : !!originalField.isMandatoryField
+                })),
+                metadataType: Number(originalField.metadataType) === 2 ? "Partner Type" : Number(originalField.metadataType) === 3 ? "User Type" : "Request Form",
+                metadataTypeId: Number(originalField.metadataType || 1),
+                requestorUsername: username || "integreonpg",
+                options: (originalField.options || []).map(o => ({
+                   id: o.fieldOptionId || (o as any).id || 0,
+                   value: o.fieldOptionValue || (o as any).value || "",
+                   isDefault: !!o.isDefault ? 1 : 0,
+                   fieldId: id,
+                   fieldOptionOrderId: o.fieldOptionOrderId || 0,
+                   isActive: (o.isActive !== false) ? 1 : 0
+                }))
+              };
+              
+              await updateFieldMut.mutateAsync(payload);
+            }
+            toast.success(`Successfully updated ${ids.length} fields`, { id: "bulk-save" });
+            setPanel("none");
+            setBulkEditingFields([]);
+            setSelectedFieldIds([]);
+          } catch (error) {
+            toast.error("Bulk update failed partially", { id: "bulk-save" });
+          }
+        }}
+        availableFields={conditionFilters}
         fieldTypes={fieldTypes}
         appTypes={appTypesRaw ?? []}
         clients={clients}
@@ -1696,264 +1826,6 @@ function OptionChip({ option: o, onDelete, deleting }: { option: FieldOption; on
   );
 }
 
-// ─── Field Form Panel (create / edit) ─────────────────────────────────────────
-
-interface FieldFormPanelProps {
-  mode: "create" | "edit";
-  field: FieldDefinition | null;
-  fieldTypes: FieldTypeInfo[];
-  appTypes: any[];
-  tenant: string;
-  clients: any;
-  onClose: () => void;
-  onSaved: () => void;
-}
-
-type FieldFormValues = {
-  fieldName: string;
-  displayName: string;
-  fieldTypeId: string;
-  metadataType: string;
-  applicationTypeIds: string; // comma-separated
-  isMandatoryField: boolean;
-  isActive: boolean;
-  isVisible: boolean;
-  isVisibleOnRequestDetails: boolean;
-  displayInRequestJourney: boolean;
-  displayInRequestDetails: boolean;
-  isForAllApplicationTypes: boolean;
-  helpText: string;
-  comments: string;
-  fieldGroup: string;
-};
-
-export function FieldFormPanel({ mode, field, fieldTypes, appTypes, tenant, clients, onClose, onSaved }: FieldFormPanelProps) {
-  const defaultValues: FieldFormValues = {
-    fieldName: field?.fieldName ?? "",
-    displayName: field?.fieldDisplayName ?? "",
-    fieldTypeId: field?.fieldTypeId ? String(field.fieldTypeId) : (fieldTypes[0] ? String(fieldTypes[0].fieldTypeId) : ""),
-    metadataType: field?.metadataType ? String(field.metadataType) : "1",
-    applicationTypeIds: (() => {
-      const ids = field?.applicationTypeIds;
-      if (Array.isArray(ids) && ids.length > 0) return ids.join(",");
-      if (field?.applicationTypeId) return String(field.applicationTypeId);
-      return "";
-    })(),
-    isMandatoryField: field?.isMandatoryField ?? field?.isRequired ?? false,
-    isActive: field?.isActive ?? true,
-    isVisible: field?.isVisible ?? true,
-    isVisibleOnRequestDetails: field?.isVisibleOnRequestDetails ?? true,
-    displayInRequestJourney: field?.displayInRequestJourney ?? false,
-    displayInRequestDetails: field?.displayInRequestDetails ?? false,
-    isForAllApplicationTypes: field?.isForAllApplicationTypes ?? false,
-    helpText: field?.helpText ?? "",
-    comments: field?.comments ?? "",
-    fieldGroup: field?.fieldGroup ?? "",
-  };
-
-  const { register, handleSubmit, watch, setValue, getValues, formState: { errors, isSubmitting } } = useForm<FieldFormValues>({ defaultValues });
-
-  // Populate fieldTypeId once fieldTypes load (they may arrive after panel opens)
-  useEffect(() => {
-    if (fieldTypes.length > 0) {
-      const cur = getValues("fieldTypeId");
-      if (!cur) setValue("fieldTypeId", String(fieldTypes[0].fieldTypeId));
-    }
-  }, [fieldTypes.length]);
-
-  const saveMut = useMutation({
-    mutationFn: async (data: FieldFormValues) => {
-      const appTypeIds = data.applicationTypeIds
-        .split(",")
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => !isNaN(n) && n > 0);
-
-      const payload: AddUpdateFieldPayload = {
-        fieldId: mode === "edit" ? (field?.fieldId ?? 0) : 0,
-        fieldType: parseInt(data.fieldTypeId, 10),
-        fieldName: data.fieldName.trim(),
-        displayName: data.displayName.trim(),
-        metadataType: parseInt(data.metadataType, 10),
-        applicationTypeIds: appTypeIds,
-        isMandatoryField: data.isMandatoryField,
-        isActive: data.isActive,
-        isVisible: data.isVisible,
-        isVisibleOnRequestDetails: data.isVisibleOnRequestDetails,
-        displayInRequestJourney: data.displayInRequestJourney,
-        displayInRequestDetails: data.displayInRequestDetails,
-        isForAllApplicationTypes: data.isForAllApplicationTypes,
-        helpText: data.helpText || undefined,
-        comments: data.comments || undefined,
-        fieldGroup: data.fieldGroup || undefined,
-        options: mode === "edit" ? (field?.options ?? []).map((o, idx) => ({
-          id: o.fieldOptionId,
-          value: o.fieldOptionValue,
-          isDefault: o.isDefault,
-          fieldId: field!.fieldId,
-          parentId: o.parentId,
-          numericValue: o.numericValue,
-          fieldOptionOrderId: o.fieldOptionOrderId || idx + 1,
-          isActive: o.isActive,
-        })) : [],
-      };
-
-      if (mode === "create") {
-        await createFieldDefinition(clients!.newCloud, tenant, payload);
-      } else {
-        await updateFieldDefinition(clients!.newCloud, tenant, payload);
-      }
-    },
-    onSuccess: () => {
-      toast.success(mode === "create" ? "Field created" : "Field updated");
-      onSaved();
-    },
-    onError: (e) => toast.error((e as Error).message),
-  });
-
-  const isForAll = watch("isForAllApplicationTypes");
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-        <div>
-          <h3 className="font-semibold text-sm text-foreground">
-            {mode === "create" ? "Create New Field" : "Edit Field"}
-          </h3>
-          {field && <p className="text-[10px] font-mono text-muted-foreground">#{field.fieldId}</p>}
-        </div>
-        <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground rounded transition-colors">
-          <X size={15} />
-        </button>
-      </div>
-
-      {/* Form body */}
-      <form onSubmit={handleSubmit((d) => saveMut.mutateAsync(d))} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-
-        {/* Display Name */}
-        <FormField label="Display Name" required error={errors.fieldName?.message}>
-          <Input
-            {...register("displayName", { required: "Display name is required" })}
-            placeholder="Human-readable label"
-            className="h-8 text-sm"
-          />
-        </FormField>
-
-        {/* Field Name */}
-        <FormField label="Field Name (API key)" required error={errors.fieldName?.message}>
-          <Input
-            {...register("fieldName", { required: "Field name is required" })}
-            placeholder="e.g. contractValue"
-            className="h-8 text-sm font-mono"
-          />
-        </FormField>
-
-        {/* Field Type */}
-        <FormField label="Field Type" required>
-          <select {...register("fieldTypeId")} className="w-full h-8 text-sm bg-background border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring">
-            {fieldTypes.length === 0 && <option value="">Loading…</option>}
-            {fieldTypes.map((ft) => (
-              <option key={ft.fieldTypeId} value={ft.fieldTypeId}>{ft.fieldTypeName}</option>
-            ))}
-          </select>
-        </FormField>
-
-        {/* Metadata Type */}
-        <FormField label="Metadata Type">
-          <select {...register("metadataType")} className="w-full h-8 text-sm bg-background border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-ring">
-            {METADATA_TYPES.map((mt) => (
-              <option key={mt.id} value={mt.id}>{mt.name}</option>
-            ))}
-          </select>
-        </FormField>
-
-        {/* Application Types */}
-        <FormField label="Application Type IDs" hint="Comma-separated. Leave blank if 'All App Types' is on.">
-          <div className="flex items-center gap-2">
-            <Input
-              {...register("applicationTypeIds")}
-              placeholder="e.g. 12,34,56"
-              disabled={isForAll}
-              className="h-8 text-sm font-mono flex-1"
-            />
-          </div>
-          {appTypes.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {appTypes.slice(0, 12).map((at: any) => (
-                <button
-                  key={at.applicationTypeId}
-                  type="button"
-                  onClick={() => {/* handled via register */}}
-                  className="text-[9px] font-mono bg-muted border border-border px-1.5 py-0.5 rounded hover:bg-muted/80 transition-colors"
-                  title={`ID: ${at.applicationTypeId}`}
-                >
-                  {at.applicationTypeName} ({at.applicationTypeId})
-                </button>
-              ))}
-            </div>
-          )}
-        </FormField>
-
-        {/* Toggles */}
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Settings</p>
-          <ToggleRow label="For All Application Types" name="isForAllApplicationTypes" register={register} />
-          <ToggleRow label="Mandatory / Required" name="isMandatoryField" register={register} />
-          <ToggleRow label="Active" name="isActive" register={register} />
-          <ToggleRow label="Visible" name="isVisible" register={register} />
-          <ToggleRow label="Visible on Request Details" name="isVisibleOnRequestDetails" register={register} />
-          <ToggleRow label="Display in Request Journey" name="displayInRequestJourney" register={register} />
-          <ToggleRow label="Display in Request Details" name="displayInRequestDetails" register={register} />
-        </div>
-
-        {/* Help Text */}
-        <FormField label="Help Text" hint="Shown below the field in forms.">
-          <textarea
-            {...register("helpText")}
-            rows={2}
-            placeholder="Optional guidance text…"
-            className="w-full text-sm bg-background border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-          />
-        </FormField>
-
-        {/* Field Group */}
-        <FormField label="Field Group">
-          <Input
-            {...register("fieldGroup")}
-            placeholder="e.g. Financial, Legal…"
-            className="h-8 text-sm"
-          />
-        </FormField>
-
-        {/* Comments */}
-        <FormField label="Comments">
-          <textarea
-            {...register("comments")}
-            rows={2}
-            placeholder="Internal notes…"
-            className="w-full text-sm bg-background border border-border rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-          />
-        </FormField>
-
-        {/* Spacer */}
-        <div className="h-4" />
-      </form>
-
-      {/* Footer */}
-      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border flex-shrink-0">
-        <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting || saveMut.isPending}>
-          Cancel
-        </Button>
-        <Button size="sm" type="submit" form="" disabled={isSubmitting || saveMut.isPending}
-          onClick={handleSubmit((d) => saveMut.mutateAsync(d))}
-        >
-          {(isSubmitting || saveMut.isPending) && <Loader2 size={13} className="animate-spin mr-1.5" />}
-          {mode === "create" ? "Create Field" : "Save Changes"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 // ─── Small helpers ─────────────────────────────────────────────────────────────
 

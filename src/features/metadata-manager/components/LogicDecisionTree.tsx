@@ -178,14 +178,15 @@ function TreeNode({
 
   // ─── Single Rule Render ───
   const rule = node as LogicRule;
-  const currentField = availableFields.find(f => 
-    String(f.fieldId) === String(rule.field?.id) || 
-    f.fieldName === rule.field?.id ||
-    String(f.fieldId) === String(rule.conditionFieldId)
-  );
+  const currentField = availableFields.find(f => {
+    const fId = String(f.id || f.fieldId || f.applicationTypeMetaDataId || "");
+    const ruleId = String(rule.field?.id || rule.conditionFieldId || "");
+    return (fId && fId === ruleId) || (f.fieldName && f.fieldName === ruleId);
+  });
 
-  const hasOptions = currentField && ["dropdown", "select", "radiobutton", "multiselect"].includes((currentField.fieldType || "").toLowerCase());
-  const options = currentField?.options ?? [];
+  const triggerOptions = (currentField as any)?.options || (currentField as any)?.fieldOptions || [];
+  const hasOptions = (triggerOptions.length > 0) || (currentField && ["dropdown", "select", "radiobutton", "multiselect", "trigger"].includes((currentField.fieldType || "").toLowerCase()));
+  const options = triggerOptions as any[];
 
   return (
     <div className="flex flex-wrap items-center gap-4 p-4 rounded-2xl bg-white/[0.04] border border-white/5 shadow-lg group/rule animate-in fade-in slide-in-from-left-4 duration-300">
@@ -195,12 +196,15 @@ function TreeNode({
       <Select 
         value={String(rule.field?.id || rule.conditionFieldId || "")} 
         onValueChange={(id) => {
-          const f = availableFields.find(af => String(af.fieldId) === id || af.fieldName === id);
+          const f = availableFields.find(af => {
+            const afId = String(af.id || af.fieldId || af.applicationTypeMetaDataId || "");
+            return afId === id || af.fieldName === id;
+          });
           onUpdate(path, { 
             conditionFieldId: id,
             field: { 
               id: id, 
-              label: f?.fieldDisplayName || f?.fieldName || id,
+              label: f?.displayName || f?.fieldDisplayName || f?.fieldName || id,
               type: f?.fieldType || "unknown"
             },
             value: "" // Clear value when field changes
@@ -210,18 +214,21 @@ function TreeNode({
         <SelectTrigger className="w-[200px] h-10 bg-[#0c0c12] border-white/10 text-[12px] font-bold rounded-xl truncate">
           <SelectValue placeholder="Select Trigger Field" />
         </SelectTrigger>
-        <SelectContent className="bg-[#14141c] border-white/10 text-white max-h-[300px]">
+        <SelectContent className="bg-[#14141c] border-white/10 text-white max-h-[300px] z-[9999]" position="popper" sideOffset={5}>
            <div className="px-2 py-2 mb-2 sticky top-0 bg-[#14141c] border-b border-white/5">
               <span className="text-[10px] font-black uppercase tracking-widest text-primary">Metadata Dictionary</span>
            </div>
-           {availableFields.map(f => (
-             <SelectItem key={f.fieldId} value={String(f.fieldId)} className="text-[12px] truncate">
-               <div className="flex flex-col">
-                  <span>{f.fieldDisplayName || f.fieldName}</span>
-                  <span className="text-[9px] opacity-30 font-mono">#{f.fieldId} • {f.fieldType}</span>
-               </div>
-             </SelectItem>
-           ))}
+           {availableFields.map((f, idx) => {
+             const key = String(f.fieldName || f.id || f.fieldId || f.applicationTypeMetaDataId || `idx-${idx}`);
+             return (
+               <SelectItem key={key} value={key} className="text-[12px] truncate">
+                 <div className="flex flex-col">
+                    <span>{f.displayName || f.fieldDisplayName || f.fieldName || "Unnamed Field"}</span>
+                    <span className="text-[9px] opacity-30 font-mono">#{key} • {f.fieldType || "trigger"}</span>
+                 </div>
+               </SelectItem>
+             );
+           })}
         </SelectContent>
       </Select>
 
@@ -233,7 +240,7 @@ function TreeNode({
         <SelectTrigger className="w-28 h-10 bg-[#0c0c12] border-white/10 text-[11px] font-black uppercase tracking-widest rounded-xl">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="bg-[#14141c] border-white/10 text-white">
+        <SelectContent className="bg-[#14141c] border-white/10 text-white z-[9999]">
           <SelectItem value="equals" className="text-[10px] font-black uppercase tracking-widest">equals</SelectItem>
           <SelectItem value="not_equals" className="text-[10px] font-black uppercase tracking-widest">not equals</SelectItem>
           <SelectItem value="contains" className="text-[10px] font-black uppercase tracking-widest">contains</SelectItem>
@@ -258,12 +265,16 @@ function TreeNode({
             <SelectTrigger className="w-full h-10 bg-primary/5 border-primary/20 text-[13px] font-bold text-primary rounded-xl">
               <SelectValue placeholder="Select Value" />
             </SelectTrigger>
-            <SelectContent className="bg-[#14141c] border-white/10 text-white">
-               {options.map(o => (
-                 <SelectItem key={o.fieldOptionId} value={o.fieldOptionValue} className="text-xs">
-                   {o.fieldOptionValue}
-                 </SelectItem>
-               ))}
+            <SelectContent className="bg-[#14141c] border-white/10 text-white z-[9999]" position="popper" sideOffset={5}>
+               {options.map((o, i) => {
+                 const key = String(o.id || o.fieldOptionId || o.value || o.fieldOptionValue || `opt-${i}`);
+                 const val = String(o.value || o.fieldOptionValue || o.id || o.fieldOptionId || "");
+                 return (
+                   <SelectItem key={key} value={val} className="text-xs">
+                     {o.fieldOptionValue || o.value || o.displayName || val}
+                   </SelectItem>
+                 );
+               })}
             </SelectContent>
           </Select>
         ) : (

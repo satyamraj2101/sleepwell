@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -37,6 +37,15 @@ interface FieldEditorDrawerProps {
   tenant?: string;
 }
 
+const METADATA_TYPES = [
+  { id: 1, name: "Request Form" },
+  { id: 2, name: "Partner Type" },
+  { id: 3, name: "User Type" },
+  { id: 4, name: "Other (4)" },
+  { id: 8, name: "Other (8)" },
+  { id: 9, name: "Other (9)" },
+];
+
 export function FieldEditorDrawer({
   field,
   bulkFields = [],
@@ -60,6 +69,16 @@ export function FieldEditorDrawer({
   const [oldProdDetail, setOldProdDetail] = useState<any>(null);
   const [logic, setLogic] = useState<LogicTree>({ condition: "AND", rules: [] });
   const [rawLogicJson, setRawLogicJson] = useState("");
+
+  // Normalize applicationTypeIds into a consistent number array for both UI and Payload
+  const normalizedAppTypeIds: number[] = useMemo(() => {
+    const rawIds = formData.applicationTypeIds;
+    if (Array.isArray(rawIds)) return rawIds.map(Number);
+    if (typeof rawIds === 'string' && rawIds.length > 0) {
+      return rawIds.split(',').map(v => Number(v.trim())).filter(n => !isNaN(n));
+    }
+    return [];
+  }, [formData.applicationTypeIds]);
 
   useEffect(() => {
     if (field && isOpen) {
@@ -118,75 +137,58 @@ export function FieldEditorDrawer({
       ? JSON.parse(rawLogicJson) 
       : logic;
 
-    const payload: AddUpdateFieldPayload = {
+
+    const payload: any = {
+      ...(oldProdDetail || {}), // Start with the full legacy schema to preserve extra fields
+      id: field?.fieldId || 0,
       fieldId: field?.fieldId || 0,
+      applicationId: field?.applicationId || (field as any)?.applicationId || 77,
       fieldName: formData.fieldName!,
       displayName: formData.fieldDisplayName!,
       fieldType: Number(formData.fieldTypeId || 1),
+      isActive: formData.isActive ? 1 : 0,
       isMandatoryField: !!formData.isRequired,
-      isActive: !!formData.isActive,
-      isVisible: formData.isVisible !== false,
-      isVisibleOnRequestDetails: formData.isVisibleOnRequestDetails !== false,
-      displayInRequestJourney: !!formData.displayInRequestJourney,
-      displayInRequestDetails: !!formData.displayInRequestDetails,
+      isVisible: formData.isVisible !== false ? 1 : 0,
+      isVisibleOnRequestDetails: formData.isVisibleOnRequestDetails !== false ? 1 : 0,
+      displayInRequestJourney: !!formData.displayInRequestJourney ? 1 : 0,
+      displayInRequestDetails: !!formData.displayInRequestDetails ? 1 : 0,
       isForAllApplicationTypes: !!formData.isForAllApplicationTypes,
-      applicationTypeIds: formData.applicationTypeIds || [],
+      applicationTypeIds: normalizedAppTypeIds,
+      applicationTypeMandatoryData: normalizedAppTypeIds.map(numId => {
+         const matrixEntry = (formData.applicationTypeMandatoryData || []).find(m => m.applicationTypeId === numId);
+         return {
+            applicationTypeId: numId,
+            isMandatory: !!matrixEntry?.isMandatory
+            // fieldId removed from here as per "correct payload" sample
+         };
+      }),
       visibilityConditions: JSON.stringify(finalLogic),
-      fieldGroup: formData.fieldGroup || "Standard",
+      fieldGroup: formData.fieldGroup || oldProdDetail?.fieldGroup || 100008,
       helpText: formData.helpText || "",
       comments: formData.comments || "",
-      metadataType: Number(formData.metadataType || 1),
+      guidanceText: formData.guidanceText || "",
+      guidance: { content: formData.guidanceText || oldProdDetail?.guidance?.content || "" },
+      metadataType: Number(formData.metadataType) === 2 ? "Partner Type" : Number(formData.metadataType) === 3 ? "User Type" : "Request Form",
+      metadataTypeId: Number(formData.metadataType || 1),
+      metadataExtractionPromptId: oldProdDetail?.metadataExtractionPromptId || 17,
+      addAttachment: oldProdDetail?.addAttachment || "YO",
+      importantDateFieldId: oldProdDetail?.importantDateFieldId || 1,
+      requestorUsername: username || "integreonpg",
       options: (formData.options || []).map(o => ({
-         id: o.fieldOptionId,
-         value: o.fieldOptionValue,
-         isDefault: o.isDefault,
+         id: o.fieldOptionId || (o as any).id || 0,
+         value: o.fieldOptionValue || (o as any).value || "",
+         isDefault: !!o.isDefault ? 1 : 0,
          fieldId: field?.fieldId || 0,
-         fieldOptionOrderId: o.fieldOptionOrderId,
-         isActive: o.isActive
+         fieldOptionOrderId: o.fieldOptionOrderId || 0,
+         isActive: o.isActive !== false ? 1 : 0
       }))
     };
 
     if (clients && username && tenant && field?.fieldId && !isBulk) {
-      // Use old prod API for update
+      // Use old prod API for update with the unified/hardened payload
       import("@/api/metadata").then(async ({ updateFieldOldProd }) => {
         try {
-          const oldProdPayload = {
-            id: field.fieldId,
-            displayName: formData.fieldDisplayName || "",
-            fieldName: formData.fieldName || "",
-            fieldType: Number(formData.fieldTypeId || oldProdDetail?.fieldType || 1),
-            isActive: formData.isActive ? 1 : 0,
-            isMandatoryField: !!formData.isRequired,
-            isVisible: formData.isVisible !== false,
-            isVisibleOnRequestDetails: formData.isVisibleOnRequestDetails !== false,
-            displayInRequestJourney: !!formData.displayInRequestJourney,
-            displayInRequestDetails: !!formData.displayInRequestDetails,
-            isForAllApplicationTypes: !!formData.isForAllApplicationTypes,
-            applicationTypeIds: formData.applicationTypeIds || [],
-            fieldGroup: formData.fieldGroup || "",
-            helpText: formData.helpText || "",
-            comments: formData.comments || "",
-            guidanceText: formData.guidanceText || oldProdDetail?.guidanceText || "",
-            metadataType: Number(formData.metadataType || 1),
-            options: (formData.options || []).map((o, idx) => ({
-              id: o.fieldOptionId,
-              value: o.fieldOptionValue,
-              isDefault: o.isDefault ? 1 : 0,
-              fieldId: field.fieldId,
-              fieldOptionOrderId: o.fieldOptionOrderId || idx + 1,
-              isActive: o.isActive ? 1 : 0,
-              parentId: o.parentId ?? null,
-              numericValue: o.numericValue ?? null,
-            })),
-            applicationTypeMandatoryData: (formData.applicationTypeMandatoryData || []).map(m => ({
-              applicationTypeId: m.applicationTypeId,
-              isMandatory: m.isMandatory,
-              fieldId: field.fieldId,
-            })),
-            guidance: formData.guidanceText ? { content: formData.guidanceText } : (oldProdDetail?.guidance ?? null),
-            requestorUsername: username,
-          };
-          await updateFieldOldProd(clients.oldProd, tenant, field.fieldId, oldProdPayload);
+          await updateFieldOldProd(clients.oldProd, tenant, field.fieldId, payload);
           toast.success("Field updated via Old Prod API");
           onClose();
         } catch (err) {
@@ -507,35 +509,60 @@ export function FieldEditorDrawer({
                  </div>
                  
                  <div className="space-y-2">
-                    {appTypes.map(appType => {
-                       const matrixEntry = (formData.applicationTypeMandatoryData || []).find(m => m.applicationTypeId === appType.applicationTypeId);
-                       return (
-                         <div key={appType.applicationTypeId} className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl hover:bg-white/[0.05] transition-all group/at">
-                            <div className="flex flex-col">
-                               <span className="text-xs font-bold text-white/80">{appType.applicationTypeName}</span>
-                               <span className="text-[9px] font-mono text-white/20 uppercase">ID: {appType.applicationTypeId}</span>
-                            </div>
-                            <div className="flex items-center gap-6">
-                               <div className="flex items-center gap-2">
-                                  <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Required</span>
-                                  <Switch 
-                                     checked={!!matrixEntry?.isMandatory} 
-                                     onCheckedChange={v => {
-                                        const current = [...(formData.applicationTypeMandatoryData || [])];
-                                        const existingIdx = current.findIndex(m => m.applicationTypeId === appType.applicationTypeId);
-                                        if (existingIdx >= 0) {
-                                           current[existingIdx].isMandatory = v;
-                                        } else {
-                                           current.push({ applicationTypeId: appType.applicationTypeId, isMandatory: v, fieldId: field?.fieldId || 0 });
-                                        }
-                                        setFormData(p => ({ ...p, applicationTypeMandatoryData: current }));
-                                     }}
-                                  />
-                               </div>
-                            </div>
-                         </div>
-                       );
-                    })}
+                     {appTypes.map(appType => {
+                        const matrixEntry = (formData.applicationTypeMandatoryData || []).find(m => m.applicationTypeId === appType.applicationTypeId);
+                        const isAssigned = normalizedAppTypeIds.includes(appType.applicationTypeId);
+
+                        return (
+                          <div key={appType.applicationTypeId} className={cn(
+                             "flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl hover:bg-white/[0.05] transition-all group/at",
+                             isAssigned && "border-primary/20 bg-primary/[0.02]"
+                          )}>
+                             <div className="flex flex-col">
+                                <span className={cn("text-xs font-bold transition-colors", isAssigned ? "text-primary" : "text-white/80")}>
+                                   {appType.applicationTypeName}
+                                </span>
+                                <span className="text-[9px] font-mono text-white/20 uppercase">ID: {appType.applicationTypeId}</span>
+                             </div>
+                             <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 pr-6 border-r border-white/5">
+                                   <span className={cn("text-[8px] font-black uppercase tracking-widest transition-colors", isAssigned ? "text-primary" : "text-white/20")}>
+                                      {isAssigned ? "Assigned" : "Inactive"}
+                                   </span>
+                                   <Switch 
+                                      checked={isAssigned} 
+                                      onCheckedChange={v => {
+                                         let nextIds = [...normalizedAppTypeIds];
+                                         if (v) {
+                                            if (!nextIds.includes(appType.applicationTypeId)) nextIds.push(appType.applicationTypeId);
+                                         } else {
+                                            nextIds = nextIds.filter(id => id !== appType.applicationTypeId);
+                                         }
+                                         setFormData(p => ({ ...p, applicationTypeIds: nextIds }));
+                                      }}
+                                   />
+                                </div>
+                                <div className="flex items-center gap-2 opacity-50 group-hover/at:opacity-100 transition-opacity">
+                                   <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Required</span>
+                                   <Switch 
+                                      checked={!!matrixEntry?.isMandatory} 
+                                      disabled={!isAssigned}
+                                      onCheckedChange={v => {
+                                         const current = [...(formData.applicationTypeMandatoryData || [])];
+                                         const existingIdx = current.findIndex(m => m.applicationTypeId === appType.applicationTypeId);
+                                         if (existingIdx >= 0) {
+                                            current[existingIdx].isMandatory = v;
+                                         } else {
+                                            current.push({ applicationTypeId: appType.applicationTypeId, isMandatory: v, fieldId: field?.fieldId || 0 });
+                                         }
+                                         setFormData(p => ({ ...p, applicationTypeMandatoryData: current }));
+                                      }}
+                                   />
+                                </div>
+                             </div>
+                          </div>
+                        );
+                     })}
                  </div>
               </TabsContent>
 

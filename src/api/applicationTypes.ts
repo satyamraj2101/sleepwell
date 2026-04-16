@@ -16,6 +16,10 @@ export async function listApplicationTypes(
       ...(params?.search && { "filter.search": params.search }),
       ...(params?.applicationTypeId && { "filter.applicationTypeId": params.applicationTypeId }),
     },
+    headers: {
+      'tenant': tenant,
+      'x-tenant-name': tenant
+    }
   });
   const raw = res.data;
   // Handles: raw array, { data: [] }, { data: { data: [] } }, { items: [] }

@@ -70,11 +70,15 @@ export function MetadataDataTable({
   const [rowSelection, setRowSelection] = useState({});
   const [expanded, setExpanded] = useState({});
 
+  // Derived selection state
+  const selectedFieldIds = useMemo(() => {
+    return Object.keys(rowSelection).map(idx => data[Number(idx)]?.fieldId).filter(Boolean) as number[];
+  }, [rowSelection, data]);
+
   // Sync selection to parent
   React.useEffect(() => {
-    const selectedIds = Object.keys(rowSelection).map(idx => data[Number(idx)]?.fieldId).filter(Boolean);
-    onSelectionChange(selectedIds);
-  }, [rowSelection, data, onSelectionChange]);
+    onSelectionChange(selectedFieldIds);
+  }, [selectedFieldIds, onSelectionChange]);
 
   const columns = useMemo<ColumnDef<FieldDefinition>[]>(() => [
     {
@@ -274,7 +278,7 @@ export function MetadataDataTable({
         );
       },
     },
-  ], [onEdit, onDelete, onInspect]);
+  ], [onEdit, onDelete, onInspect, onSelectionChange, onBulkEdit]);
 
   const table = useReactTable({
     data,

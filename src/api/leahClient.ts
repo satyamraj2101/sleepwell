@@ -28,7 +28,7 @@ export function createOldProdClient(cloudInstance: string, token: string, tenant
     baseURL: `https://${cloudInstance}/cpaimt_api`,
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Tenant": tenant,
+      "tenant": tenant,
       "x-tenant-name": tenant,
     },
   });
@@ -46,7 +46,7 @@ export function createNewCloudClient(newCloudApi: string, token: string, tenant:
     baseURL: `https://${newCloudApi}`,
     headers: {
       "Authorization": `Bearer ${token}`,
-      "Tenant": tenant,
+      "tenant": tenant,
       "x-tenant-name": tenant,
     },
   });

@@ -231,6 +231,10 @@ export async function getConditionFilters(
       skipLoadingFieldOptions: true,
       showAllKLO: false,
       forRequestStatus: true
+    },
+    headers: {
+      'tenant': tenant,
+      'x-tenant-name': tenant
     }
   });
   return res.data?.data ?? res.data ?? [];
@@ -275,7 +279,13 @@ export async function getFieldDetailOldProd(
 ): Promise<any> {
   const res = await client.get(
     `/api/${tenant}/v1/applicationtypemetadata/getbyid/${fieldId}`,
-    { params: { requestorUsername } }
+    { 
+      params: { requestorUsername },
+      headers: {
+        'tenant': tenant,
+        'x-tenant-name': tenant
+      }
+    }
   );
   return res.data?.data ?? res.data;
 }
@@ -294,7 +304,13 @@ export async function updateFieldOldProd(
 ): Promise<any> {
   const res = await client.put(
     `/api/${tenant}/v1/applicationtypemetadata/${fieldId}`,
-    payload
+    payload,
+    {
+      headers: {
+        'tenant': tenant,
+        'x-tenant-name': tenant
+      }
+    }
   );
   return res.data?.data ?? res.data;
 }
