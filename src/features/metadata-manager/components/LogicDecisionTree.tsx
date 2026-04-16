@@ -179,9 +179,22 @@ function TreeNode({
   // ─── Single Rule Render ───
   const rule = node as LogicRule;
   const currentField = availableFields.find(f => {
-    const fId = String(f.id || f.fieldId || f.applicationTypeMetaDataId || "");
-    const ruleId = String(rule.field?.id || rule.conditionFieldId || "");
-    return (fId && fId === ruleId) || (f.fieldName && f.fieldName === ruleId);
+    const normalize = (id: any) => {
+      if (!id) return "";
+      const s = String(id);
+      return s.startsWith('F') ? s.substring(1) : s;
+    };
+    
+    const fId = normalize(f.id || f.fieldId || f.applicationTypeMetaDataId);
+    const fName = (f.fieldName || "").toLowerCase();
+    const fDisplay = (f.displayName || f.fieldDisplayName || "").toLowerCase();
+    
+    const ruleId = normalize(rule.field?.id || rule.conditionFieldId || "");
+    const ruleTitle = (rule.field?.label || "").toLowerCase();
+
+    return (fId && fId === ruleId) || 
+           (fName && (fName === ruleId || fName === ruleTitle)) ||
+           (fDisplay && (fDisplay === ruleId || fDisplay === ruleTitle));
   });
 
   const triggerOptions = (currentField as any)?.options || (currentField as any)?.fieldOptions || [];

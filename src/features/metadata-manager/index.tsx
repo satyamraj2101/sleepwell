@@ -1408,7 +1408,15 @@ export default function MetadataManagerPage() {
             toast.error("Bulk update failed partially", { id: "bulk-save" });
           }
         }}
-        availableFields={conditionFilters}
+        availableFields={useMemo(() => {
+          const merged = [...conditionFilters];
+          allFields.forEach(af => {
+            if (!merged.some(m => String(m.fieldId || m.id) === String(af.fieldId || af.id))) {
+              merged.push(af);
+            }
+          });
+          return merged;
+        }, [conditionFilters, allFields])}
         fieldTypes={fieldTypes}
         appTypes={appTypesRaw ?? []}
         clients={clients}
