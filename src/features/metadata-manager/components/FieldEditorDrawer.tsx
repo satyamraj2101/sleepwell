@@ -227,15 +227,17 @@ export function FieldEditorDrawer({
       }
     }
 
+    // Strip HTML tags to avoid WAF "Cross Site Scripting detected!" rejections
+    const stripHtml = (s: string) => s ? s.replace(/<[^>]*>/g, "").trim() : "";
 
+    // Build a CLEAN minimal payload — DO NOT spread oldProdDetail (contains server HTML that WAF blocks)
     const payload: any = {
-      ...(oldProdDetail || {}), // Start with the full legacy schema to preserve extra fields
       id: field?.fieldId || 0,
       fieldId: field?.fieldId || 0,
-      applicationId: field?.applicationId || (field as any)?.applicationId || 77,
+      applicationId: oldProdDetail?.applicationId || field?.applicationId || (field as any)?.applicationId || 77,
       fieldName: formData.fieldName!,
       displayName: formData.fieldDisplayName!,
-      fieldType: Number(formData.fieldTypeId || 1),
+      fieldType: Number(oldProdDetail?.fieldType || formData.fieldTypeId || 1),
       isActive: formData.isActive ? 1 : 0,
       isMandatoryField: !!formData.isRequired,
       isVisible: formData.isVisible !== false ? 1 : 0,
@@ -249,19 +251,18 @@ export function FieldEditorDrawer({
          return {
             applicationTypeId: numId,
             isMandatory: !!matrixEntry?.isMandatory
-            // fieldId removed from here as per "correct payload" sample
          };
       }),
       visibilityConditions: JSON.stringify(finalLogic),
       fieldGroup: formData.fieldGroup || oldProdDetail?.fieldGroup || 100008,
-      helpText: formData.helpText || "",
-      comments: formData.comments || "",
-      guidanceText: formData.guidanceText || "",
-      guidance: { content: formData.guidanceText || oldProdDetail?.guidance?.content || "" },
+      helpText: stripHtml(formData.helpText || ""),
+      comments: stripHtml(formData.comments || ""),
+      guidanceText: stripHtml(formData.guidanceText || ""),
+      guidance: { content: stripHtml(formData.guidanceText || "") },
       metadataType: Number(formData.metadataType) === 2 ? "Partner Type" : Number(formData.metadataType) === 3 ? "User Type" : "Request Form",
       metadataTypeId: Number(formData.metadataType || 1),
       metadataExtractionPromptId: oldProdDetail?.metadataExtractionPromptId || 17,
-      addAttachment: oldProdDetail?.addAttachment || "YO",
+      addAttachment: oldProdDetail?.addAttachment || "NO",
       importantDateFieldId: oldProdDetail?.importantDateFieldId || 1,
       requestorUsername: username || "integreonpg",
       options: (formData.options || []).map(o => ({
@@ -275,18 +276,24 @@ export function FieldEditorDrawer({
     };
 
     if (clients && username && tenant && field?.fieldId && !isBulk) {
-      // Use old prod API for update with the unified/hardened payload
-      import("@/api/metadata").then(async ({ updateFieldOldProd }) => {
+      import("@/api/metadata").then(async ({ updateFieldOldProd, updateFieldDefinition }) => {
         try {
           await updateFieldOldProd(clients.oldProd, tenant, field.fieldId, payload);
-          toast.success("Field updated via Old Ord API");
+          toast.success("Field saved successfully!");
           onClose();
-        } catch (err) {
-          toast.error((err as Error).message);
+        } catch (oldProdErr) {
+          // Fallback: try the new cloud PUT API
+          console.warn("Old prod update failed, trying new cloud:", oldProdErr);
+          try {
+            await updateFieldDefinition(clients.newCloud, tenant, payload);
+            toast.success("Field saved via new API!");
+            onClose();
+          } catch (newCloudErr) {
+            toast.error(`Save failed: ${(newCloudErr as Error).message}`);
+          }
         }
       });
     } else {
-      // Fallback: use parent's onSave handler (for create, or when no clients)
       onSave(payload);
     }
   };
