@@ -227,61 +227,71 @@ export function FieldEditorDrawer({
       }
     }
 
-    // Strip HTML tags to avoid WAF "Cross Site Scripting detected!" rejections
+    // Strip HTML from freetext fields only to avoid WAF "Cross Site Scripting detected!" rejections
     const stripHtml = (s: string) => s ? s.replace(/<[^>]*>/g, "").trim() : "";
 
-    // Build a CLEAN minimal payload — DO NOT spread oldProdDetail (contains server HTML that WAF blocks)
+    // Ensure parsedConditions is always present in visibilityConditions to match server schema
+    const logicWithParsed = { ...finalLogic, parsedConditions: "" };
+
+    // Build payload: START from oldProdDetail (preserves all server-required fields like 
+    // numericOptions, calculationType, entityValues, approvalJsonConfiguration, etc.)
+    // then OVERRIDE with our form values. This matches the correct payload schema exactly.
     const payload: any = {
+      ...(oldProdDetail || {}),
+      // Core identity
       id: field?.fieldId || 0,
-      fieldId: field?.fieldId || 0,
-      applicationId: oldProdDetail?.applicationId || field?.applicationId || (field as any)?.applicationId || 77,
+      applicationId: oldProdDetail?.applicationId || field?.applicationId || 77,
       fieldName: formData.fieldName!,
       displayName: formData.fieldDisplayName!,
       fieldType: Number(oldProdDetail?.fieldType || formData.fieldTypeId || 1),
+      // Status toggles
       isActive: formData.isActive ? 1 : 0,
-      isMandatoryField: !!formData.isRequired,
-      isVisible: formData.isVisible !== false ? 1 : 0,
-      isVisibleOnRequestDetails: formData.isVisibleOnRequestDetails !== false ? 1 : 0,
-      displayInRequestJourney: !!formData.displayInRequestJourney ? 1 : 0,
-      displayInRequestDetails: !!formData.displayInRequestDetails ? 1 : 0,
-      isForAllApplicationTypes: !!formData.isForAllApplicationTypes,
-      // Use oldProdDetail as fallback for applicationTypeIds — never send empty [] (causes ArgumentNullException server-side)
-      applicationTypeIds: normalizedAppTypeIds.length > 0 
-        ? normalizedAppTypeIds 
-        : (oldProdDetail?.applicationTypeIds || null),
+      // App type matrix — use form state if populated, else fall back to old prod data
+      applicationTypeIds: normalizedAppTypeIds.length > 0
+        ? normalizedAppTypeIds
+        : (oldProdDetail?.applicationTypeIds || []),
       applicationTypeMandatoryData: normalizedAppTypeIds.length > 0
         ? normalizedAppTypeIds.map(numId => {
-           const matrixEntry = (formData.applicationTypeMandatoryData || oldProdDetail?.applicationTypeMandatoryData || []).find((m: any) => m.applicationTypeId === numId);
-           return {
-              applicationTypeId: numId,
-              isMandatory: !!matrixEntry?.isMandatory
-           };
-        })
-        : (oldProdDetail?.applicationTypeMandatoryData || null),
-      visibilityConditions: JSON.stringify(finalLogic),
+            const matrixEntry = (formData.applicationTypeMandatoryData || oldProdDetail?.applicationTypeMandatoryData || []).find((m: any) => m.applicationTypeId === numId);
+            return { applicationTypeId: numId, isMandatory: !!matrixEntry?.isMandatory };
+          })
+        : (oldProdDetail?.applicationTypeMandatoryData || []),
+      isForAllApplicationTypes: !!formData.isForAllApplicationTypes,
+      // Logic
+      visibilityConditions: JSON.stringify(logicWithParsed),
+      // Misc
       fieldGroup: formData.fieldGroup || oldProdDetail?.fieldGroup || 100008,
-      helpText: stripHtml(formData.helpText || ""),
-      comments: stripHtml(formData.comments || ""),
-      guidanceText: stripHtml(formData.guidanceText || ""),
-      guidance: { content: stripHtml(formData.guidanceText || "") },
-      metadataType: Number(formData.metadataType) === 2 ? "Partner Type" : Number(formData.metadataType) === 3 ? "User Type" : "Request Form",
-      metadataTypeId: Number(formData.metadataType || 1),
-      metadataExtractionPromptId: oldProdDetail?.metadataExtractionPromptId || 17,
-      addAttachment: oldProdDetail?.addAttachment || "NO",
-      importantDateFieldId: oldProdDetail?.importantDateFieldId || 1,
-      requestorUsername: username || "integreonpg",
-      // Use oldProdDetail options if no UI changes — never send empty options[] for a field that has options (causes ArgumentNullException)
+      // ⚠️ Strip HTML to prevent WAF XSS blocks. These are the ONLY fields that need stripping.
+      helpText: stripHtml(formData.helpText || oldProdDetail?.helpText || ""),
+      comments: stripHtml(formData.comments || oldProdDetail?.comments || ""),
+      guidanceText: stripHtml(formData.guidanceText || oldProdDetail?.guidanceText || ""),
+      guidance: { content: stripHtml(formData.guidanceText || oldProdDetail?.guidanceText || "") },
+      // importantDateFieldId must be null (not 1) when not set — backend treats "1" as an invalid reference
+      importantDateFieldId: oldProdDetail?.importantDateFieldId || null,
+      // requestorUsername: preserve original casing from old prod detail (case matters for the API)
+      requestorUsername: oldProdDetail?.requestorUsername || username || "integreonpg",
+      // Options: use form changes if made, else preserve old prod options 
       options: (formData.options && formData.options.length > 0)
         ? formData.options.map(o => ({
-           id: o.fieldOptionId || (o as any).id || 0,
-           value: o.fieldOptionValue || (o as any).value || "",
-           isDefault: !!o.isDefault ? 1 : 0,
-           fieldId: field?.fieldId || 0,
-           fieldOptionOrderId: o.fieldOptionOrderId || 0,
-           isActive: o.isActive !== false ? 1 : 0
-        }))
-        : (oldProdDetail?.options || [])
+            id: o.fieldOptionId || (o as any).id || 0,
+            value: o.fieldOptionValue || (o as any).value || "",
+            isDefault: !!o.isDefault ? 1 : 0,
+            fieldId: field?.fieldId || 0,
+            fieldOptionOrderId: o.fieldOptionOrderId || 0,
+            isActive: o.isActive !== false ? 1 : 0
+          }))
+        : (oldProdDetail?.options || []),
     };
+
+    // Remove fields that are NOT in the correct payload schema (cause server validation errors)
+    delete payload.fieldId;
+    delete payload.isMandatoryField;
+    delete payload.isVisible;
+    delete payload.isVisibleOnRequestDetails;
+    delete payload.displayInRequestJourney;
+    delete payload.displayInRequestDetails;
+    delete payload.metadataType;
+    delete payload.metadataTypeId;
 
     if (clients && username && tenant && field?.fieldId && !isBulk) {
       import("@/api/metadata").then(async ({ updateFieldOldProd, updateFieldDefinition }) => {
@@ -290,7 +300,6 @@ export function FieldEditorDrawer({
           toast.success("Field saved successfully!");
           onClose();
         } catch (oldProdErr) {
-          // Fallback: try the new cloud PUT API
           console.warn("Old prod update failed, trying new cloud:", oldProdErr);
           try {
             await updateFieldDefinition(clients.newCloud, tenant, payload);
