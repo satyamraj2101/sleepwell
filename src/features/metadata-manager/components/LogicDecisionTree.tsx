@@ -3,7 +3,8 @@ import {
   Plus,
   Trash2,
   Layers,
-  Zap
+  Zap,
+  FileCode
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -145,11 +146,21 @@ function TreeNode({
              <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 text-[9px] font-black uppercase tracking-widest border border-white/5"
+                className="h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-white/20 text-[9px] font-black uppercase tracking-widest border border-white/5"
                 onClick={() => onAdd(path, true)}
              >
                 <Layers size={12} className="mr-1.5" /> Group
              </Button>
+             {depth > 0 && (
+               <Button 
+                 variant="ghost" 
+                 size="icon" 
+                 className="h-8 w-8 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg border border-white/5 transition-colors"
+                 onClick={() => onRemove(path.slice(0, -1), path[path.length - 1])}
+               >
+                 <Trash2 size={12} />
+               </Button>
+             )}
           </div>
         </div>
 
@@ -202,8 +213,8 @@ function TreeNode({
     });
   }, [rule, availableFields]);
 
-  const triggerOptions = (currentField as any)?.options || (currentField as any)?.fieldOptions || [];
-  const hasOptions = (triggerOptions.length > 0) || (currentField && ["dropdown", "select", "radiobutton", "multiselect", "trigger"].includes((currentField.fieldType || "").toLowerCase()));
+  const triggerOptions = (currentField as any)?.options || (currentField as any)?.fieldOptions || (currentField as any)?.values || [];
+  const hasOptions = (triggerOptions.length > 0) || (currentField && ["dropdown", "select", "radiobutton", "multiselect", "trigger", "cascader"].includes((currentField.fieldType || "").toLowerCase()));
   const options = triggerOptions as any[];
 
   return (
@@ -213,19 +224,19 @@ function TreeNode({
       {/* Field Selector */}
       <Select 
         value={currentField ? String(currentField.fieldName || currentField.fieldId || currentField.id) : String(rule.field?.id || rule.conditionFieldId || "")} 
-        onValueChange={(id) => {
-          const f = availableFields.find(af => {
-            const afId = String(af.id || af.fieldId || af.applicationTypeMetaDataId || "");
-            return afId === id || af.fieldName === id;
-          });
+        onValueChange={(idOrName) => {
+          const f = availableFields.find(af => 
+            String(af.id || af.fieldId || af.applicationTypeMetaDataId) === idOrName || 
+            af.fieldName === idOrName
+          );
           onUpdate(path, { 
-            conditionFieldId: id,
+            conditionFieldId: idOrName,
             field: { 
-              id: id, 
-              label: f?.displayName || f?.fieldDisplayName || f?.fieldName || id,
+              id: idOrName, 
+              label: f?.displayName || f?.fieldDisplayName || f?.fieldName || idOrName,
               type: f?.fieldType || "unknown"
             },
-            value: "" // Clear value when field changes
+            value: "" 
           });
         }}
       >
@@ -234,9 +245,10 @@ function TreeNode({
              {currentField ? (currentField.displayName || currentField.fieldDisplayName || currentField.fieldName) : "Select Trigger Field"}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="bg-[#14141c] border-white/10 text-white max-h-[300px] z-[9999]" position="popper" sideOffset={5}>
-           <div className="px-2 py-2 mb-2 sticky top-0 bg-[#14141c] border-b border-white/5">
+        <SelectContent className="bg-[#14141c] border-white/10 text-white max-h-[350px] z-[9999]" position="popper" sideOffset={5}>
+           <div className="px-3 py-2.5 mb-2 sticky top-0 bg-[#14141c] border-b border-white/5 flex items-center justify-between">
               <span className="text-[10px] font-black uppercase tracking-widest text-primary">Metadata Dictionary</span>
+              <Layers size={14} className="text-white/10" />
            </div>
            {availableFields.map((f, idx) => {
              const key = String(f.fieldName || f.id || f.fieldId || f.applicationTypeMetaDataId || `idx-${idx}`);
@@ -270,15 +282,15 @@ function TreeNode({
 
       {/* Value (Auto-Discovery Dropdown vs Input) */}
       <div className="flex-1 min-w-[140px]">
-        {hasOptions ? (
+        {hasOptions && options.length > 0 ? (
           <Select 
             value={String(rule.value || "")} 
             onValueChange={(val) => {
-              const opt = options.find(o => String(o.fieldOptionId) === val || o.fieldOptionValue === val);
+              const opt = options.find(o => String(o.fieldOptionId || o.id || o.value) === val || o.fieldOptionValue === val);
               onUpdate(path, { 
                 value: val,
-                valueDisplay: opt?.fieldOptionValue || val,
-                values0: { value: val, label: opt?.fieldOptionValue || val }
+                valueDisplay: opt?.fieldOptionValue || opt?.value || val,
+                values0: { value: val, label: opt?.fieldOptionValue || opt?.value || val }
               });
             }}
           >
@@ -301,7 +313,7 @@ function TreeNode({
           <Input 
             value={rule.value || ""} 
             onChange={(e) => onUpdate(path, { value: e.target.value })}
-            placeholder="Type value..."
+            placeholder={hasOptions ? "Loading options..." : "Type value..."}
             className="h-10 bg-[#0c0c12] border-white/10 text-[13px] rounded-xl focus:ring-primary/40 focus:border-primary/40 transition-all placeholder:text-white/10"
           />
         )}
@@ -310,10 +322,10 @@ function TreeNode({
       <Button 
         variant="ghost" 
         size="icon" 
-        className="h-9 w-9 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-xl opacity-0 group-hover/rule:opacity-100 transition-all"
+        className="h-9 w-9 text-white/20 hover:text-red-400 hover:bg-red-400/10 rounded-xl border border-white/5 transition-colors"
         onClick={() => onRemove(path.slice(0, -1), path[path.length - 1])}
       >
-        <Trash2 size={14} />
+        <Trash2 size={12} />
       </Button>
     </div>
   );
