@@ -8,6 +8,7 @@ export async function listDepartments(
 ): Promise<{ data: Department[]; totalRecords: number }> {
   const res = await client.get(`/api/${tenant}/department`, {
     params: { PageNumber: params?.pageNumber ?? 1, PageSize: params?.pageSize ?? 200, IsActive: params?.isActive, Search: params?.search },
+    headers: { tenant: tenant.toLowerCase(), "x-tenant-name": tenant.toLowerCase() }
   });
   const d = res.data;
   if (Array.isArray(d)) return { data: d, totalRecords: d.length };
@@ -20,6 +21,7 @@ export async function listRecordClassifications(
 ): Promise<Array<{ id: number; name: string }>> {
   const res = await client.get(`/api/${tenant}/Master/recordclassification`, {
     params: { PageSize: 500 },
+    headers: { tenant: tenant.toLowerCase(), "x-tenant-name": tenant.toLowerCase() }
   });
   const d = res.data;
   const arr = d?.data ?? d?.items ?? (Array.isArray(d) ? d : []);
@@ -42,6 +44,7 @@ export async function listCurrencies(
 ): Promise<Currency[]> {
   const res = await client.get(`/api/${tenant}/currency`, {
     params: { PageNumber: 1, PageSize: 500 },
+    headers: { tenant: tenant.toLowerCase(), "x-tenant-name": tenant.toLowerCase() }
   });
   const raw = res.data;
   const items = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
@@ -66,6 +69,7 @@ export async function listCountries(
 ): Promise<Country[]> {
   const res = await client.get(`/api/${tenant}/Master/country`, {
     params: { PageSize: 300 },
+    headers: { tenant: tenant.toLowerCase(), "x-tenant-name": tenant.toLowerCase() }
   });
   const d = res.data;
   return d?.data ?? d?.items ?? (Array.isArray(d) ? d : []);
@@ -77,6 +81,7 @@ export async function listApplicationsDropdown(
 ): Promise<Array<{ applicationId: number; applicationName: string }>> {
   const res = await client.get(`/api/${tenant}/application`, {
     params: { PageSize: 100 },
+    headers: { tenant: tenant.toLowerCase(), "x-tenant-name": tenant.toLowerCase() }
   });
   const d = res.data;
   return d?.data ?? d?.items ?? (Array.isArray(d) ? d : []);

@@ -80,9 +80,6 @@ export function FieldEditorDrawer({
     return [];
   }, [formData.applicationTypeIds]);
 
-  useEffect(() => {
-    if (field && isOpen) {
-      setFormData(field);
 
   // Parse logic helper
   const updateLogicFromRaw = (raw: any) => {
