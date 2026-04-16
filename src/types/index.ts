@@ -283,10 +283,14 @@ export interface FieldDefinition {
   fieldId: number;
   fieldName: string;
   fieldDisplayName: string;
+  displayName?: string;              // alias used by some API responses
+  id?: number;                       // alias for fieldId in legacy responses  
+  applicationTypeMetaDataId?: number; // legacy ID format
   ctgFieldName?: string;
   fieldType: string;
   fieldTypeId?: number;
   applicationTypeId: number;
+  applicationId?: number;            // parent application ID
   applicationTypeName?: string;
   applicationTypeIds?: number[];
   metadataType: string | number;
@@ -315,9 +319,11 @@ export interface FieldDefinition {
     fieldId: number;
   }>;
   visibilityConditions?: string | LogicTree; // API returns string, we use LogicTree in UI
+  visibilityConditionObject?: LogicTree;     // parsed version
   visibilityCondition?: string | null;
   guidance?: { content: string };
   options?: FieldOption[];
+  [key: string]: any;                // allow extra legacy API properties
 }
 
 export interface LogicTree {

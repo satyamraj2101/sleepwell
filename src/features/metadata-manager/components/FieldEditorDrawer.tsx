@@ -75,10 +75,10 @@ export function FieldEditorDrawer({
 
   // Normalize applicationTypeIds into a consistent number array for both UI and Payload
   const normalizedAppTypeIds: number[] = useMemo(() => {
-    const rawIds = formData.applicationTypeIds;
+    const rawIds: any = formData.applicationTypeIds;
     if (Array.isArray(rawIds)) return rawIds.map(Number);
-    if (typeof rawIds === 'string' && rawIds.length > 0) {
-      return rawIds.split(',').map(v => Number(v.trim())).filter(n => !isNaN(n));
+    if (typeof rawIds === 'string' && (rawIds as string).length > 0) {
+      return (rawIds as string).split(',').map((v: string) => Number(v.trim())).filter((n: number) => !isNaN(n));
     }
     return [];
   }, [formData.applicationTypeIds]);
