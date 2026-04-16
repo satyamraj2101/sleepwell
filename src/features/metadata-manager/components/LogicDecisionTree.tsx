@@ -178,24 +178,28 @@ function TreeNode({
 
   // ─── Single Rule Render ───
   const rule = node as LogicRule;
-  const currentField = availableFields.find(f => {
-    const normalize = (id: any) => {
-      if (!id) return "";
-      const s = String(id);
-      return s.startsWith('F') ? s.substring(1) : s;
+  
+  // Robust Universal Field Resolver
+  const currentField = useMemo(() => {
+    const normalize = (val: any) => {
+      if (!val) return "";
+      const s = String(val).toLowerCase();
+      return s.startsWith('f') ? s.substring(1) : s;
     };
-    
-    const fId = normalize(f.id || f.fieldId || f.applicationTypeMetaDataId);
-    const fName = (f.fieldName || "").toLowerCase();
-    const fDisplay = (f.displayName || f.fieldDisplayName || "").toLowerCase();
-    
-    const ruleId = normalize(rule.field?.id || rule.conditionFieldId || "");
-    const ruleTitle = (rule.field?.label || "").toLowerCase();
 
-    return (fId && fId === ruleId) || 
-           (fName && (fName === ruleId || fName === ruleTitle)) ||
-           (fDisplay && (fDisplay === ruleId || fDisplay === ruleTitle));
-  });
+    const ruleId = normalize(rule.field?.id || rule.conditionFieldId || "");
+    const ruleLabel = (rule.field?.label || "").toLowerCase();
+
+    return availableFields.find(f => {
+      const fId = normalize(f.id || f.fieldId || f.applicationTypeMetaDataId);
+      const fName = (f.fieldName || "").toLowerCase();
+      const fDisplay = (f.displayName || f.fieldDisplayName || "").toLowerCase();
+      
+      return (fId && fId === ruleId) || 
+             (fName && (fName === ruleId || fName === ruleLabel)) ||
+             (fDisplay && (fDisplay === ruleId || fDisplay === ruleLabel));
+    });
+  }, [rule, availableFields]);
 
   const triggerOptions = (currentField as any)?.options || (currentField as any)?.fieldOptions || [];
   const hasOptions = (triggerOptions.length > 0) || (currentField && ["dropdown", "select", "radiobutton", "multiselect", "trigger"].includes((currentField.fieldType || "").toLowerCase()));
@@ -207,7 +211,7 @@ function TreeNode({
       
       {/* Field Selector */}
       <Select 
-        value={String(rule.field?.id || rule.conditionFieldId || "")} 
+        value={currentField ? String(currentField.fieldName || currentField.fieldId || currentField.id) : String(rule.field?.id || rule.conditionFieldId || "")} 
         onValueChange={(id) => {
           const f = availableFields.find(af => {
             const afId = String(af.id || af.fieldId || af.applicationTypeMetaDataId || "");
@@ -224,8 +228,10 @@ function TreeNode({
           });
         }}
       >
-        <SelectTrigger className="w-[200px] h-10 bg-[#0c0c12] border-white/10 text-[12px] font-bold rounded-xl truncate">
-          <SelectValue placeholder="Select Trigger Field" />
+        <SelectTrigger className="w-[240px] h-10 bg-[#0c0c12] border-white/10 text-[12px] font-bold rounded-xl truncate">
+          <SelectValue>
+             {currentField ? (currentField.displayName || currentField.fieldDisplayName || currentField.fieldName) : "Select Trigger Field"}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent className="bg-[#14141c] border-white/10 text-white max-h-[300px] z-[9999]" position="popper" sideOffset={5}>
            <div className="px-2 py-2 mb-2 sticky top-0 bg-[#14141c] border-b border-white/5">
@@ -234,11 +240,11 @@ function TreeNode({
            {availableFields.map((f, idx) => {
              const key = String(f.fieldName || f.id || f.fieldId || f.applicationTypeMetaDataId || `idx-${idx}`);
              return (
-               <SelectItem key={key} value={key} className="text-[12px] truncate">
-                 <div className="flex flex-col">
-                    <span>{f.displayName || f.fieldDisplayName || f.fieldName || "Unnamed Field"}</span>
-                    <span className="text-[9px] opacity-30 font-mono">#{key} • {f.fieldType || "trigger"}</span>
-                 </div>
+               <SelectItem key={key} value={key} className="text-[12px] py-3 focus:bg-primary/10 transition-colors">
+                  <div className="flex flex-col gap-0.5">
+                     <span className="font-bold">{f.displayName || f.fieldDisplayName || f.fieldName || "Unnamed Field"}</span>
+                     <span className="text-[9px] opacity-20 font-mono tracking-tighter uppercase">{f.fieldType || "trigger"} • #{key}</span>
+                  </div>
                </SelectItem>
              );
            })}
