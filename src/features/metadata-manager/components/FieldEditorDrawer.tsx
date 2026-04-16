@@ -114,7 +114,30 @@ export function FieldEditorDrawer({
       setOldProdDetail(null); // Reset when opening new field
 
       // Initial parse from shallow data
-      updateLogicFromRaw(field.visibilityConditions || field.visibilityCondition || (field as any).visibilityConditionObject);
+      const localRaw = field.visibilityConditions || field.visibilityCondition || (field as any).visibilityConditionObject;
+      updateLogicFromRaw(localRaw);
+
+      // SCAN GLOBAL MATRIX: If no local logic, check if an external rule targets this field
+      if (!localRaw || (typeof localRaw === 'object' && (!localRaw.rules || localRaw.rules.length === 0))) {
+        const normalize = (id: any) => {
+          if (!id) return "";
+          const s = String(id);
+          return s.startsWith('F') ? s.substring(1) : s;
+        };
+        const currentId = normalize(field.fieldId || field.ctgFieldName);
+        const currentName = (field.fieldName || "").toLowerCase();
+
+        const externalRule = availableFields.find(f => {
+           // We are looking for a rule where the TARGET is our current field
+           const targetId = normalize(f.fieldId || f.ctgFieldName || f.applicationTypeMetaDataId);
+           const targetName = (f.fieldName || "").toLowerCase();
+           return (targetId && targetId === currentId) || (targetName && targetName === currentName);
+        });
+
+        if (externalRule) {
+          updateLogicFromRaw(externalRule.visibilityConditionObject || externalRule.visibilityConditions || externalRule.visibilityCondition);
+        }
+      }
 
       // Fetch rich data
       if (clients && field?.fieldId && username && tenant) {
@@ -123,13 +146,16 @@ export function FieldEditorDrawer({
             .then(d => {
               setOldProdDetail(d);
               // Re-parse with rich data (will contain full rules)
-              if (d) updateLogicFromRaw(d.visibilityCondition || d.visibilityConditions || d.visibilityConditionObject);
+              if (d) {
+                const richRaw = d.visibilityCondition || d.visibilityConditions || d.visibilityConditionObject;
+                updateLogicFromRaw(richRaw);
+              }
             })
             .catch(() => {});
         });
       }
     }
-  }, [field, isOpen]);
+  }, [field, isOpen, availableFields]);
 
   const handleSave = () => {
     if (isBulk) {
