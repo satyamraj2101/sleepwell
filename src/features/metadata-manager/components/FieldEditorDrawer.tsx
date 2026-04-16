@@ -217,9 +217,15 @@ export function FieldEditorDrawer({
       return;
     }
 
-    const finalLogic = logicMode === "expert" 
-      ? JSON.parse(rawLogicJson) 
-      : logic;
+    let finalLogic = logic;
+    if (logicMode === "expert") {
+      try {
+        finalLogic = rawLogicJson.trim() ? JSON.parse(rawLogicJson) : logic;
+      } catch (e) {
+        toast.error("Invalid Expert JSON format. Please correct it before saving.");
+        return;
+      }
+    }
 
 
     const payload: any = {
