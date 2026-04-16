@@ -4,7 +4,6 @@ import { IntakeFormField } from '@/types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Info, HelpCircle } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 
 interface SimulatedFieldProps {
@@ -15,7 +14,7 @@ interface SimulatedFieldProps {
   isGhost?: boolean;
 }
 
-export const IntakeRadioGroup: React.FC<SimulatedFieldProps> = ({ field, value, onChange, isMandatory, isGhost }) => {
+export const IntakeRadioGroup: React.FC<SimulatedFieldProps> = ({ field, value, onChange, isMandatory: _isMandatory, isGhost }) => {
   const options = field.selectOptions ? Object.entries(field.selectOptions) : [];
   
   return (

@@ -1,5 +1,5 @@
 
-import { IntakeFormField, VisibilityCondition } from "@/types";
+import { IntakeFormField, IntakeFormFieldGroup } from "@/types";
 
 /**
  * Standard Leah Operators
@@ -132,7 +132,7 @@ export function isFieldVisible(
       return evaluateCondition(actualVal, rule.operator || "equal", targetVal);
     });
 
-    const isMet = op === "OR" ? results.some(r => r === true) : results.every(r => r === true);
+    const isMet = op === "OR" ? results.some((r: any) => r === true) : results.every((r: any) => r === true);
     if (!isMet) return false; // Enforce hidden-by-default if logic exists but isn't met
   }
 
@@ -183,10 +183,10 @@ export function getLogicTriggers(groups: IntakeFormFieldGroup[]): Set<number> {
     }
   };
 
-  groups.forEach(g => {
+  groups.forEach((g: any) => {
     const fields = [
-      ...(g.fields ?? []), 
-      ...(g.sections ?? []).flatMap(s => s.fields ?? [])
+      ...(g.fields ?? []),
+      ...(g.sections ?? []).flatMap((s: any) => s.fields ?? [])
     ];
 
     fields.forEach(f => {

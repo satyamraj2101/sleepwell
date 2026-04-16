@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { X, Network, Database, Zap, BookOpen, Fingerprint, ShieldAlert, FileJson, Copy, Check, Search, ArrowLeftRight, Dna, Info, List as ListIcon } from "lucide-react";
+import { X, Network, Database, Zap, BookOpen, Fingerprint, ShieldAlert, FileJson, Copy, Check, Search, ArrowLeftRight, Dna, List as ListIcon } from "lucide-react";
 import { useApiClients } from "@/hooks/useApiClients";
 import { listFieldDefinitions, getFieldById } from "@/api/metadata";
 import { useAuthStore } from "@/store/authStore";
@@ -34,25 +34,26 @@ export function BlueprintInspectorDrawer({ fieldId, onClose, rawRules = [], allF
     enabled: !!fieldId && !!tenant && !!newCloud,
   });
 
-  const { data: compareField, isLoading: isCompareLoading } = useQuery({
+  const { data: compareField } = useQuery({
     queryKey: ['field-detail', compareId, tenant],
     queryFn: () => getFieldById(newCloud!, tenant, compareId!),
     enabled: !!compareId && !!tenant && !!newCloud,
   });
 
-  const { data: searchFields = [] } = useQuery({
+  const { data: searchFieldsRaw } = useQuery({
     queryKey: ['all-fields-short', tenant],
     queryFn: () => listFieldDefinitions(newCloud!, tenant, { pageSize: 1000 }),
     enabled: !!fieldId && !!tenant && !!newCloud && initialFields.length === 0,
   });
+  const searchFields: FieldDefinition[] = searchFieldsRaw?.data ?? [];
 
   const availableFields = initialFields.length > 0 ? initialFields : searchFields;
 
   const filteredFields = useMemo(() => {
     if (!search) return [];
     const q = search.toLowerCase();
-    return availableFields.filter(f => 
-      (f.fieldName || "").toLowerCase().includes(q) || 
+    return availableFields.filter((f: FieldDefinition) =>
+      (f.fieldName || "").toLowerCase().includes(q) ||
       (f.fieldDisplayName || "").toLowerCase().includes(q) ||
       String(f.fieldId).includes(q)
     ).slice(0, 10);
@@ -431,7 +432,7 @@ ${field.comments || 'No design notes provided.'}
                              />
                              {search && filteredFields.length > 0 && (
                                <div className="absolute top-full left-0 right-0 mt-2 bg-[#1a1a1e] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden divide-y divide-white/5">
-                                  {filteredFields.map(f => (
+                                  {filteredFields.map((f: FieldDefinition) => (
                                     <button 
                                       key={f.fieldId} 
                                       onClick={() => { setCompareId(f.fieldId); setSearch(""); }}

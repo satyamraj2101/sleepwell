@@ -262,3 +262,39 @@ export async function getNumericCustomFields(
   });
   return res.data?.data ?? res.data ?? [];
 }
+
+/**
+ * GET /api/{tenant}/v1/applicationtypemetadata/getbyid/{id}
+ * Uses the OLD PROD API to get full field detail (includes all edit fields)
+ */
+export async function getFieldDetailOldProd(
+  client: AxiosInstance,
+  tenant: string,
+  fieldId: number,
+  requestorUsername: string
+): Promise<any> {
+  const res = await client.get(
+    `/api/${tenant}/v1/applicationtypemetadata/getbyid/${fieldId}`,
+    { params: { requestorUsername } }
+  );
+  return res.data?.data ?? res.data;
+}
+
+/**
+ * PUT /api/{tenant}/v1/applicationtypemetadata/{id}
+ * Uses the OLD PROD API to update a field definition.
+ * The payload must include: id, displayName, fieldName, fieldType (numeric),
+ * isActive (1/0), options[], applicationTypeMandatoryData[], requestorUsername, etc.
+ */
+export async function updateFieldOldProd(
+  client: AxiosInstance,
+  tenant: string,
+  fieldId: number,
+  payload: Record<string, any>
+): Promise<any> {
+  const res = await client.put(
+    `/api/${tenant}/v1/applicationtypemetadata/${fieldId}`,
+    payload
+  );
+  return res.data?.data ?? res.data;
+}

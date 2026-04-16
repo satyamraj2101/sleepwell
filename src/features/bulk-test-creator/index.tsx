@@ -18,9 +18,9 @@ import { getIntakeFormFields, createContract, getContractDetail, updateContract,
 import { getContractTemplates } from "@/api/applicationTypes";
 import { getSnapshotApprovals } from "@/api/approval";
 import { listUsers, fetchAllUsers, listRoles } from "@/api/users";
-import { listFieldDefinitions } from "@/api/metadata";
+import { listFieldDefinitions, getConditionFilters, getNumericCustomFields } from "@/api/metadata";
 import { getESignStatus, sendESignRequest } from "@/api/esign";
-import { listDepartments, listCountries, listCurrencies } from "@/api/departments";
+import { listDepartments, listCountries, listCurrencies, listRecordClassifications } from "@/api/departments";
 import { ContractEditDrawer } from "@/features/contract-edit/components/ContractEditDrawer";
 import type { IntakeFormField, ContractDetail, FieldOption, PreExecutionApproval, AssigneeRef, ClientRef, LegalPartyRef, ESignRecipient } from "@/types";
 
@@ -131,7 +131,7 @@ function isMandatory(f: FlatField): boolean {
 
 function dummyValue(field: FlatField, fallbackOpts?: Record<string, string> | null): string {
   // Use official fieldTypeId mapping first (v1.9 masters)
-  const tid = field.fieldTypeId;
+  const tid = (field as any).fieldTypeId;
 
   // 1. Explicit options — use first key's label
   const opts = (field.selectOptions && Object.keys(field.selectOptions).length > 0)
@@ -1446,13 +1446,6 @@ export default function BulkTestCreatorPage() {
     staleTime: 30 * 60_000,
   });
 
-  const { data: masterFieldTypes = [] } = useQuery({
-    queryKey: ["masterFieldTypes", tenant],
-    queryFn: () => getMetaDataFieldTypes(clients!.oldProd, tenant),
-    enabled: !!clients && !!tenant,
-    staleTime: 24 * 3600_000, // 24h
-  });
-
   const [applyRules, setApplyRules] = useState(false);
   const [showConditionLogic, setShowConditionLogic] = useState(false);
 
@@ -1741,9 +1734,10 @@ export default function BulkTestCreatorPage() {
             appTypeName,
             requestId: rid,
             recordId: detail.recordId ?? 0,
+            versionStrategy: "generate" as const,
             status: "idle",
             steps: buildSteps().map(s => s.id === "create" ? { ...s, status: "pass", result: `Imported REQ-${rid}` } : s),
-            fieldValues: {}, 
+            fieldValues: {},
             editOpen: false,
             currentStage: (detail as any).workflowStage || (detail as any).currentStage || "Imported",
           });
@@ -1865,10 +1859,12 @@ export default function BulkTestCreatorPage() {
       patchStep(run.id, "version", { status: "running" });
       const tg = Date.now();
 
+      let effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
+
       if (latestRun.versionStrategy === "upload") {
         // Option B: Manual File Upload
         if (!latestRun.uploadedFile) throw new Error("No file selected for upload strategy");
-        
+
         await uploadContractFile(clients.oldProd, tenant, {
           RequestId: Number(requestId),
           File: latestRun.uploadedFile,
@@ -1877,11 +1873,11 @@ export default function BulkTestCreatorPage() {
           IsContractVersion: true,
           DocumentType: 1
         });
-        
+
         await new Promise(r => setTimeout(r, 1000)); // Brief pause for processing
       } else {
         // Option A: Auto-generate via Questionnaire (Existing logic)
-        let effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
+        effectiveTemplateId = latestRun.selectedTemplateId ?? latestRun.templateId;
 
         // Auto-select template if none specified
         if (!effectiveTemplateId && latestRun.versionStrategy === "generate") {
@@ -2743,7 +2739,7 @@ export default function BulkTestCreatorPage() {
                       const isChecked = fillMode === "all" ? true : fillMode === "mandatory" ? mandatory : customSelected.has(id);
                       const val = globalValues[id] ?? "";
                       const hasOptions = !!(f.selectOptions && Object.keys(f.selectOptions).length > 0) || !!(f.values?.length);
-                      const isNumeric = numericFields.some(nf => nf.ctgFieldName === f.ctgFieldName || (nf.fieldName && nf.fieldName === f.displayName));
+                      const isNumeric = numericFields.some((nf: any) => nf.ctgFieldName === f.ctgFieldName || (nf.fieldName && nf.fieldName === f.displayName));
 
                       return (
                         <div key={id} className={cn(

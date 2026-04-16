@@ -314,7 +314,30 @@ export interface FieldDefinition {
     isMandatory: boolean;
     fieldId: number;
   }>;
+  visibilityConditions?: string | LogicTree; // API returns string, we use LogicTree in UI
+  visibilityCondition?: string | null;
+  guidance?: { content: string };
   options?: FieldOption[];
+}
+
+export interface LogicTree {
+  condition: "AND" | "OR";
+  rules: Array<LogicRule | LogicTree>;
+  parsedConditions?: string;
+}
+
+export interface LogicRule {
+  field?: {
+    id: string;
+    label: string;
+    type: string;
+  };
+  conditionFieldId?: string | number;
+  operator: string;
+  value?: any;
+  valueDisplay?: any;
+  values?: any[];
+  values0?: any;
 }
 
 export interface FieldOption {
@@ -365,6 +388,16 @@ export interface AddUpdateFieldPayload {
   displayInRequestJourney: boolean;
   displayInRequestDetails: boolean;
   isForAllApplicationTypes: boolean;
+  visibilityConditions?: string; // Stringified LogicTree
+  applicationTypeMandatoryData?: Array<{
+    applicationTypeId: number;
+    isMandatory: boolean;
+    fieldId: number;
+  }>;
+  guidance?: { content: string };
+  guidanceText?: string;
+  calculationTypeValue?: string | null;
+  calculatedFieldUnit?: number;
 }
 
 export interface AddUpdateFieldOption {

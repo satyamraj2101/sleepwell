@@ -5,13 +5,12 @@ import { toast } from "sonner";
 import {
   Plus, Copy, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Search, X, Trash2,
   Edit2, Download, RefreshCw, Star, Eye, EyeOff, Loader2, GitBranch, List, Network, Layers,
-  DollarSign, Zap, Activity, Info, Calendar, Type, BookOpen, GitMerge, Circle, Unlock
+  DollarSign, Zap, Activity, Info, Calendar, Type, BookOpen, Circle, Unlock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { PageHeader, Spinner, ErrorAlert } from "@/components/shared/PageHeader";
 import { useApiClients } from "@/hooks/useApiClients";
@@ -25,7 +24,6 @@ import {
   updateFieldDefinition,
   deleteFieldDefinition,
   getConditionFilters,
-  getMetaDataFieldTypes,
   getNumericCustomFields,
 } from "@/api/metadata";
 import { getIntakeFormFields } from "@/api/contractRequest";
@@ -34,6 +32,8 @@ import { FieldDefinition, FieldOption, FieldTypeInfo, AddUpdateFieldPayload, Int
 import { BlueprintInspectorDrawer } from "./components/BlueprintInspectorDrawer";
 import { SimulatedField } from "./components/SimulatedFields";
 import { isFieldVisible, getLogicTriggers, evaluateCondition } from "./utils/logicEvaluator";
+import { MetadataDataTable } from "./components/MetadataDataTable";
+import { FieldEditorDrawer } from "./components/FieldEditorDrawer";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -517,7 +517,7 @@ export default function MetadataManagerPage() {
   const [metaTypeFilter, setMetaTypeFilter] = useState<string>("all");
   const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
   const [showMissingOnly, setShowMissingOnly] = useState(false);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [_expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [isGlobalMode, setIsGlobalMode] = useState(false);
 
   // Panel state
@@ -551,7 +551,9 @@ export default function MetadataManagerPage() {
     staleTime: 5 * 60_000,
   });
 
-  const fieldQueryKey = QK.fieldDefs(tenant, isGlobalMode ? "global" : (selAppTypeId ?? undefined));
+  const fieldQueryKey = isGlobalMode
+    ? ["fieldDefs", tenant, "global"] as const
+    : QK.fieldDefs(tenant, selAppTypeId ?? undefined);
 
   const { data: fieldData, isLoading, error, refetch } = useQuery({
     queryKey: fieldQueryKey,
@@ -579,7 +581,7 @@ export default function MetadataManagerPage() {
     staleTime: 2 * 60_000,
   });
 
-  const { data: numericFields = [], error: numericError, isLoading: numericLoading } = useQuery({
+  const { data: _numericFields = [], error: numericError } = useQuery({
     queryKey: ["numericFields", tenant, username],
     queryFn: () => getNumericCustomFields(clients!.oldProd, tenant, username),
     enabled: !!clients && !!username,
@@ -721,12 +723,14 @@ export default function MetadataManagerPage() {
     onSuccess: () => { invalidate(); toast.success("Option added"); },
     onError: (e) => toast.error((e as Error).message),
   });
+  void addOptMut;
 
   const delOptMut = useMutation({
     mutationFn: (optionId: number) => deleteFieldOption(clients!.newCloud, tenant, optionId),
     onSuccess: () => { invalidate(); toast.success("Option removed"); },
     onError: (e) => toast.error((e as Error).message),
   });
+  void delOptMut;
 
   const delFieldMut = useMutation({
     mutationFn: (id: number) => deleteFieldDefinition(clients!.newCloud, tenant, id),
@@ -735,6 +739,18 @@ export default function MetadataManagerPage() {
       setDeleteConfirm(null);
       toast.success("Field deleted");
     },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const createFieldMut = useMutation({
+    mutationFn: (payload: AddUpdateFieldPayload) => createFieldDefinition(clients!.newCloud, tenant, payload),
+    onSuccess: () => { invalidate(); setPanel("none"); setEditingField(null); toast.success("Field created"); },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const updateFieldMut = useMutation({
+    mutationFn: (payload: AddUpdateFieldPayload) => updateFieldDefinition(clients!.newCloud, tenant, payload),
+    onSuccess: () => { invalidate(); setPanel("none"); setEditingField(null); toast.success("Field updated"); },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -838,7 +854,7 @@ export default function MetadataManagerPage() {
 
     conditionFilters.forEach(cf => processItem(cf));
     allFields.forEach(f => {
-      if (f.visibilityConditions || (f as any).visibilityCondition || f.visibilityConditionObject) processItem(f);
+      if (f.visibilityConditions || (f as any).visibilityCondition || (f as any).visibilityConditionObject) processItem(f);
     });
 
     const hub: Record<string, Record<string, any[]>> = {};
@@ -911,17 +927,30 @@ export default function MetadataManagerPage() {
     return map;
   }, [intakeGroups, conditionFilters]);
 
+  const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
+  const [_bulkEditingFields, setBulkEditingFields] = useState<FieldDefinition[]>([]);
+
   const fields = useMemo(() => {
     const q = search.toLowerCase();
     return allFields.filter((f) => {
       if (q && !f.fieldDisplayName?.toLowerCase().includes(q) && !f.fieldName?.toLowerCase().includes(q) && !String(f.fieldId).includes(q)) return false;
       if (typeFilter !== "all" && (f.fieldType ?? "").toLowerCase() !== typeFilter) return false;
+      if (metaTypeFilter !== "all" && String(f.metadataType) !== metaTypeFilter) return false;
       if (activeFilter === "active" && !f.isActive) return false;
       if (activeFilter === "inactive" && f.isActive) return false;
       if (showMissingOnly && (!isDropdownLike(f.fieldType) || (f.options?.length ?? 0) > 0)) return false;
       return true;
     });
-  }, [allFields, search, typeFilter, activeFilter, showMissingOnly]);
+  }, [allFields, search, typeFilter, metaTypeFilter, activeFilter, showMissingOnly]);
+
+  const resetAllFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setMetaTypeFilter("all");
+    setActiveFilter("all");
+    setShowMissingOnly(false);
+    setSelAppTypeId(null);
+  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -932,6 +961,7 @@ export default function MetadataManagerPage() {
       return next;
     });
   }
+  void toggleExpand;
 
   function openEdit(f: FieldDefinition) {
     setEditingField(f);
@@ -940,7 +970,15 @@ export default function MetadataManagerPage() {
 
   function openCreate() {
     setEditingField(null);
+    setBulkEditingFields([]);
     setPanel("create");
+  }
+
+  function openBulkEdit() {
+    const fieldsToEdit = allFields.filter(f => selectedFieldIds.includes(f.fieldId));
+    setBulkEditingFields(fieldsToEdit);
+    setEditingField(null);
+    setPanel("edit");
   }
 
   function exportToExcel() {
@@ -1173,45 +1211,18 @@ export default function MetadataManagerPage() {
           {isLoading && <div className="flex justify-center py-20"><Spinner size={28} /></div>}
 
           {!isLoading && (
-            <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-              {/* Table header */}
-              {fields.length > 0 && (
-                <div
-                  className="grid items-center gap-2 px-3 py-1.5 bg-muted/40 border-b border-border text-[9px] font-semibold text-muted-foreground uppercase tracking-wider"
-                  style={{ gridTemplateColumns: "14px 1fr auto auto auto auto auto" }}
-                >
-                  <span />
-                  <span>Field</span>
-                  <span>Type</span>
-                  <span className="text-center">A · R · V</span>
-                  <span className="text-right">Opts</span>
-                  <span className="text-right">ID</span>
-                  <span />
-                </div>
-              )}
-              {fields.length === 0 && (
-                <div className="py-20 text-center text-sm text-muted-foreground">
-                  {allFields.length === 0 ? "No fields found. Try changing filters or select an app type." : "No fields match the current filters."}
-                </div>
-              )}
-              {fields.map((f) => (
-                <FieldRow
-                  key={f.fieldId}
-                  field={f}
-                  influenceCount={influenceMap[f.fieldId] || 0}
-                  isNumeric={numericFields.some((nf: any) => nf.ctgFieldName === f.fieldName || nf.fieldName === f.fieldDisplayName)}
-                  expanded={expandedIds.has(f.fieldId)}
-                  onToggle={() => toggleExpand(f.fieldId)}
-                  onEdit={() => openEdit(f)}
-                  onDelete={() => setDeleteConfirm(f)}
-                  onInspect={(id) => setSelectedInspectorId(id)}
-                  onAddOption={(value) => addOptMut.mutate({ fieldId: f.fieldId, value })}
-                  onDeleteOption={(optId) => delOptMut.mutate(optId)}
-                  addingOption={addOptMut.isPending}
-                  deletingOption={delOptMut.isPending}
-                />
-              ))}
-            </div>
+            <MetadataDataTable 
+              data={fields}
+              onEdit={openEdit}
+              onDelete={setDeleteConfirm}
+              onInspect={setSelectedInspectorId}
+              onSelectionChange={setSelectedFieldIds}
+              onBulkEdit={openBulkEdit}
+              onResetFilters={resetAllFilters}
+              globalSearch={search}
+              onSearchChange={setSearch}
+              isLoading={isLoading}
+            />
           )}
         </>
       )}
@@ -1256,24 +1267,24 @@ export default function MetadataManagerPage() {
         />
       )}
 
-      {/* Side panel — fixed overlay so it doesn't affect layout */}
-      {panel !== "none" && (
-        <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[440px] border-l border-border bg-background/95 backdrop-blur-sm flex flex-col shadow-2xl">
-          <FieldFormPanel
-            mode={panel}
-            field={editingField}
-            fieldTypes={fieldTypes}
-            appTypes={appTypesRaw ?? []}
-            tenant={tenant}
-            clients={clients}
-            onClose={() => { setPanel("none"); setEditingField(null); }}
-            onSaved={() => { invalidate(); setPanel("none"); setEditingField(null); }}
-          />
-        </div>
-      )}
-      {panel !== "none" && (
-        <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px]" onClick={() => { setPanel("none"); setEditingField(null); }} />
-      )}
+      <FieldEditorDrawer
+        field={editingField}
+        isOpen={panel === "edit" || panel === "create"}
+        onClose={() => { setPanel("none"); setEditingField(null); }}
+        onSave={(payload) => {
+          if (panel === "create") {
+            createFieldMut.mutate(payload);
+          } else {
+            updateFieldMut.mutate(payload);
+          }
+        }}
+        availableFields={allFields}
+        fieldTypes={fieldTypes}
+        appTypes={appTypesRaw ?? []}
+        clients={clients}
+        username={username}
+        tenant={tenant}
+      />
 
       {/* Delete confirm modal */}
       {deleteConfirm && (
@@ -1335,9 +1346,9 @@ interface FieldRowProps {
   isNumeric: boolean;
 }
 
-function FieldRow({ 
-  field: f, 
-  influenceCount, 
+export function FieldRow({
+  field: f,
+  influenceCount,
   isNumeric, 
   expanded, 
   onToggle, 
@@ -1716,7 +1727,7 @@ type FieldFormValues = {
   fieldGroup: string;
 };
 
-function FieldFormPanel({ mode, field, fieldTypes, appTypes, tenant, clients, onClose, onSaved }: FieldFormPanelProps) {
+export function FieldFormPanel({ mode, field, fieldTypes, appTypes, tenant, clients, onClose, onSaved }: FieldFormPanelProps) {
   const defaultValues: FieldFormValues = {
     fieldName: field?.fieldName ?? "",
     displayName: field?.fieldDisplayName ?? "",
@@ -2001,21 +2012,6 @@ function FilterChip({ children, active, onClick, inactiveClass }: {
           ? "bg-foreground text-background border-foreground"
           : cn("bg-transparent border-border text-muted-foreground hover:border-foreground/40", inactiveClass)
       )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function IconBtn({ children, title, onClick, className }: {
-  children: React.ReactNode; title: string; onClick: () => void; className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={cn("p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors", className)}
     >
       {children}
     </button>
@@ -2406,20 +2402,11 @@ function IntakeFieldsPanel({
     });
   }
 
-  // Master Context: Flatten all groups/sections into a single field array for cross-logic resolution
-  const allIntakeFields = useMemo(() => {
-    return groups.flatMap(g => [
-      ...(g.fields ?? []),
-      ...(g.sections ?? []).flatMap(s => s.fields ?? [])
-    ]);
-  }, [groups]);
-
   const triggers = useMemo(() => getLogicTriggers(groups), [groups]);
 
   // Build interactive trigger steps — one entry per trigger field, sorted by impact
   const triggerSteps = useMemo((): TriggerStep[] => {
     const allIntakeF = groups.flatMap(g => [
-      ...(g.fields ?? []),
       ...(g.sections ?? []).flatMap(s => s.fields ?? []),
     ]);
     const metaMap = new Map(
@@ -2774,8 +2761,6 @@ function IntakeFieldsPanel({
       </div>
 
       {[...groups].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((group, gi) => {
-        const allFields: IntakeFormField[] = (group.sections ?? []).flatMap((s) => s.fields ?? []);
-
         return (
           <div key={gi} className="overflow-hidden bg-white/[0.02] border border-white/[0.05] rounded-3xl backdrop-blur-3xl shadow-2xl">
             {/* Group header */}
@@ -2835,7 +2820,7 @@ function IntakeFieldsPanel({
                             isGhost={!visible}
                             expanded={expandedFields.has(f.fieldId)}
                             onToggle={() => toggleField(f.fieldId)}
-                            allFields={allIntakeFields}
+                            allFields={allFields}
                             globalDictionary={globalDictionary}
                           />
                         );
@@ -3021,23 +3006,19 @@ function IntakeFieldRow({
 
 // ─── Condition Card ───────────────────────────────────────────────────────────
 
-function ConditionCard({ 
-  cond, 
-  ci, 
+function ConditionCard({
+  cond,
+  ci: _ci,
   simulationValues,
   allFields,
   globalDictionary
-}: { 
-  cond: any; 
+}: {
+  cond: any;
   ci: number;
   simulationValues: Record<number, any>;
   allFields: FieldDefinition[];
   globalDictionary: FieldDefinition[];
 }) {
-  const [showRaw, setShowRaw] = useState(false);
-
-  const logicalOp = String(cond?.logicalOperator || cond?.condition || (ci > 0 ? "AND" : ""));
-
   let fieldNameRaw: any = cond?.fieldLabel ?? cond?.conditionFieldName ?? cond?.fieldName ?? cond?.field ?? cond?.id;
   let fieldName = "?";
   if (fieldNameRaw === null || fieldNameRaw === undefined) fieldName = "?";
@@ -3053,8 +3034,6 @@ function ConditionCard({
 
   const operatorRaw = String(cond?.operator ?? cond?.conditionType ?? "").trim();
   const operatorStr = operatorRaw.toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
-  const NO_VAL_OPS = ['ISNOTNULL','ISNULL','IS NOT NULL','IS NULL','IS EMPTY','IS NOT EMPTY','IS_NOT_NULL','IS_NULL','EXISTS','NOT EXISTS','NOT_NULL','NULL'];
-  const operatorNeedsNoValue = NO_VAL_OPS.some(op => operatorStr.replace(/\s/g,'').includes(op.replace(/\s/g,'')));
 
   // NEW: Logic Audit Evaluation
   const fIdInt = parseInt(fieldId, 10);
@@ -3109,88 +3088,6 @@ function ConditionCard({
   );
 }
 
-// Deprecated old card logic below (keeping for context if needed, but the return above handles it)
-function ConditionCardOld({ cond, ci }: { cond: any; ci: number }) {
-
-  let valStr = "";
-  if (!operatorNeedsNoValue) {
-    const candidates: any[] = [cond?.valueDisplay, cond?.displayValue, cond?.conditionValue, cond?.value, cond?.val, (cond as any)?.values];
-    for (const c of candidates) {
-      if (c === null || c === undefined) continue;
-      let ex = "";
-      if (Array.isArray(c)) {
-        ex = c.filter(Boolean).map((x: any) => typeof x === 'object' ? String((x as any).label ?? (x as any).displayValue ?? (x as any).name ?? (x as any).id ?? JSON.stringify(x)) : String(x)).join(', ');
-      } else if (typeof c === 'object') {
-        ex = String((c as any).label ?? (c as any).displayValue ?? (c as any).name ?? (c as any).id ?? (c as any).value ?? JSON.stringify(c));
-      } else {
-        ex = String(c);
-      }
-      if (ex.trim()) { valStr = ex; break; }
-    }
-  }
-
-  const opColor = operatorStr.includes('NOT') ? 'text-red-300 bg-red-500/10 border-red-500/20' :
-    operatorStr.includes('NULL') ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' :
-    'text-amber-300 bg-amber-500/10 border-amber-500/20';
-
-  return (
-    <div className="rounded-lg border border-violet-500/20 overflow-hidden">
-      {/* Main condition row */}
-      <div className="bg-background/40 hover:bg-violet-500/5 px-3 py-2.5 text-[11px] font-mono transition-all">
-        <div className="flex items-center gap-2 flex-wrap">
-          {ci > 0 && (
-            <span className="text-violet-300 font-black text-[9px] uppercase tracking-widest bg-violet-500/20 border border-violet-500/30 px-1.5 py-0.5 rounded shrink-0">
-              {logicalOp || "AND"}
-            </span>
-          )}
-          <span className="text-muted-foreground/60 shrink-0 text-[10px]">IF</span>
-          <span className="text-violet-200 font-bold px-2 py-0.5 bg-violet-500/10 rounded border border-violet-500/25 max-w-[260px] truncate" title={fieldName}>
-            {fieldName}
-          </span>
-          {fieldId && fieldId !== "0" && (
-            <span className="text-muted-foreground/30 text-[9px] font-mono shrink-0">#{fieldId}</span>
-          )}
-          <span className={`font-bold px-2 py-0.5 rounded text-[10px] shrink-0 border ${opColor}`}>{operatorStr || "="}</span>
-          {!operatorNeedsNoValue && (
-            <span className={cn("font-semibold px-2 py-0.5 rounded border text-[11px] transition-colors", valStr ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/25' : 'text-muted-foreground/40 border-dashed border-muted text-[9px] italic')}>
-              {valStr ? `"${valStr}"` : "value unavailable"}
-            </span>
-          )}
-          {operatorNeedsNoValue && (
-            <span className="text-sky-500/40 text-[9px] italic shrink-0">— null check</span>
-          )}
-          {/* Raw JSON toggle */}
-          <button
-            onClick={() => setShowRaw(p => !p)}
-            className={cn("ml-auto shrink-0 text-[9px] px-2 py-0.5 rounded border transition-colors", showRaw ? "text-violet-400 bg-violet-500/20 border-violet-500/40" : "text-muted-foreground/40 border-border/40 hover:text-muted-foreground hover:border-border")}
-          >
-            {showRaw ? "▲ schema" : "▼ schema"}
-          </button>
-        </div>
-        {(cond as any)?.action && (
-          <div className="mt-1.5 text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
-            <span className="text-white/30 font-bold tracking-widest text-[8px]">ACTION</span>
-            <span className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-white/60">{(cond as any).action}</span>
-          </div>
-        )}
-      </div>
-      {/* Inline raw JSON panel */}
-      {showRaw && (
-        <div className="border-t border-violet-500/20">
-          <div className="bg-violet-500/5 px-3 py-1.5 border-b border-violet-500/10 flex items-center justify-between">
-            <span className="text-[9px] font-black text-violet-400 uppercase tracking-widest">Raw Leah Logic Schema</span>
-            <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(cond, null, 2)); toast.success('Copied JSON'); }} className="text-[9px] text-muted-foreground/40 hover:text-violet-400 transition-colors">
-              copy
-            </button>
-          </div>
-          <pre className="p-3 text-[10px] font-mono text-emerald-400/80 whitespace-pre-wrap break-all max-h-[280px] overflow-auto leading-relaxed bg-[#080812]">
-            {JSON.stringify(cond, null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Field Tree Panel ─────────────────────────────────────────────────────────
 
@@ -3236,7 +3133,6 @@ function FieldTreePanel({ fields, isLoading, isGlobalMode, appTypeName, hasAppTy
   function collapseAll() { setExpandedGroups(new Set()); }
 
   const activeCount = fields.filter(f => f.isActive).length;
-  const inactiveCount = fields.length - activeCount;
 
   if (!hasAppType) return (
     <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
@@ -3307,7 +3203,6 @@ function FieldTreePanel({ fields, isLoading, isGlobalMode, appTypeName, hasAppTy
         )}
         {groupedFields.map(([group, groupFields]) => {
           const isOpen = expandedGroups.has(group);
-          const activeInGroup = groupFields.filter(f => f.isActive).length;
           const hasConditioned = groupFields.filter(f => {
             const vc = (f as any).visibilityConditions;
             return Array.isArray(vc) ? vc.length > 0 : !!vc;
