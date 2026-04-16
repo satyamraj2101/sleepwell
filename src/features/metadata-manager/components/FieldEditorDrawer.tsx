@@ -243,7 +243,7 @@ export function FieldEditorDrawer({
          return {
             applicationTypeId: numId,
             isMandatory: !!matrixEntry?.isMandatory
-            // fieldId removed from here as per \"correct payload\" sample
+            // fieldId removed from here as per "correct payload" sample
          };
       }),
       visibilityConditions: JSON.stringify(finalLogic),
@@ -252,15 +252,15 @@ export function FieldEditorDrawer({
       comments: formData.comments || "",
       guidanceText: formData.guidanceText || "",
       guidance: { content: formData.guidanceText || oldProdDetail?.guidance?.content || "" },
-      metadataType: Number(formData.metadataType) === 2 ? \"Partner Type\" : Number(formData.metadataType) === 3 ? \"User Type\" : \"Request Form\",
+      metadataType: Number(formData.metadataType) === 2 ? "Partner Type" : Number(formData.metadataType) === 3 ? "User Type" : "Request Form",
       metadataTypeId: Number(formData.metadataType || 1),
       metadataExtractionPromptId: oldProdDetail?.metadataExtractionPromptId || 17,
-      addAttachment: oldProdDetail?.addAttachment || \"YO\",
+      addAttachment: oldProdDetail?.addAttachment || "YO",
       importantDateFieldId: oldProdDetail?.importantDateFieldId || 1,
-      requestorUsername: username || \"integreonpg\",
+      requestorUsername: username || "integreonpg",
       options: (formData.options || []).map(o => ({
          id: o.fieldOptionId || (o as any).id || 0,
-         value: o.fieldOptionValue || (o as any).value || \"\",
+         value: o.fieldOptionValue || (o as any).value || "",
          isDefault: !!o.isDefault ? 1 : 0,
          fieldId: field?.fieldId || 0,
          fieldOptionOrderId: o.fieldOptionOrderId || 0,
@@ -270,10 +270,10 @@ export function FieldEditorDrawer({
 
     if (clients && username && tenant && field?.fieldId && !isBulk) {
       // Use old prod API for update with the unified/hardened payload
-      import(\"@/api/metadata\").then(async ({ updateFieldOldProd }) => {
+      import("@/api/metadata").then(async ({ updateFieldOldProd }) => {
         try {
           await updateFieldOldProd(clients.oldProd, tenant, field.fieldId, payload);
-          toast.success(\"Field updated via Old Ord API\");
+          toast.success("Field updated via Old Ord API");
           onClose();
         } catch (err) {
           toast.error((err as Error).message);
@@ -289,123 +289,123 @@ export function FieldEditorDrawer({
     <>
       <div 
         className={cn(
-          \"fixed inset-0 bg-black/60 backdrop-blur-md z-[100] transition-opacity duration-300\",
-          isOpen ? \"opacity-100\" : \"opacity-0 pointer-events-none\"
+          "fixed inset-0 bg-black/60 backdrop-blur-md z-[100] transition-opacity duration-300",
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
       />
       
       <div 
         className={cn(
-          \"fixed right-0 top-0 bottom-0 w-[700px] bg-[#0c0c0e]/95 backdrop-blur-3xl border-l border-white/10 z-[101] shadow-2xl transition-transform duration-500 ease-out flex flex-col\",
-          isOpen ? \"translate-x-0\" : \"translate-x-full\"
+          "fixed right-0 top-0 bottom-0 w-[700px] bg-[#0c0c0e]/95 backdrop-blur-3xl border-l border-white/10 z-[101] shadow-2xl transition-transform duration-500 ease-out flex flex-col",
+          isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className=\"p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]\">
-           <div className=\"flex items-center gap-4\">
-              <div className={cn(\"h-12 w-12 rounded-2xl flex items-center justify-center border shadow-lg shadow-primary/5\", isBulk ? \"bg-amber-500/10 border-amber-500/20\" : \"bg-primary/10 border-primary/20\")}>
-                 {isBulk ? <Layers size={24} className=\"text-amber-400\" /> : <Fingerprint size={24} className=\"text-primary\" />}
+        <div className="p-8 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+           <div className="flex items-center gap-4">
+              <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center border shadow-lg shadow-primary/5", isBulk ? "bg-amber-500/10 border-amber-500/20" : "bg-primary/10 border-primary/20")}>
+                 {isBulk ? <Layers size={24} className="text-amber-400" /> : <Fingerprint size={24} className="text-primary" />}
               </div>
               <div>
-                 <h3 className=\"text-xl font-black text-white tracking-tight\">{isBulk ? \"Bulk Architect\" : \"Leah Architect\"}</h3>
-                 <p className=\"text-[10px] text-muted-foreground/40 uppercase font-black tracking-widest leading-none mt-1\">
-                    {isBulk ? `Batch Command: ${bulkFields.length} Nodes` : \"Metadata Command Center\"}
+                 <h3 className="text-xl font-black text-white tracking-tight">{isBulk ? "Bulk Architect" : "Leah Architect"}</h3>
+                 <p className="text-[10px] text-muted-foreground/40 uppercase font-black tracking-widest leading-none mt-1">
+                    {isBulk ? `Batch Command: ${bulkFields.length} Nodes` : "Metadata Command Center"}
                  </p>
               </div>
            </div>
 
            {/* Quick Pillar */}
            {!isBulk && field && (
-             <div className=\"flex items-center gap-6 px-6 py-2 bg-white/[0.03] border border-white/5 rounded-2xl\">
-                <div className=\"flex flex-col\">
-                   <span className=\"text-[9px] font-black uppercase text-white/20 tracking-widest\">Node ID</span>
-                   <span className=\"text-xs font-mono font-bold text-primary\">#{field.fieldId}</span>
+             <div className="flex items-center gap-6 px-6 py-2 bg-white/[0.03] border border-white/5 rounded-2xl">
+                <div className="flex flex-col">
+                   <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Node ID</span>
+                   <span className="text-xs font-mono font-bold text-primary">#{field.fieldId}</span>
                 </div>
-                <div className=\"h-8 w-px bg-white/5\" />
-                <div className=\"flex flex-col\">
-                   <span className=\"text-[9px] font-black uppercase text-white/20 tracking-widest\">Type</span>
-                   <span className=\"text-xs font-bold text-white/60 lowercase\">{field.fieldType}</span>
+                <div className="h-8 w-px bg-white/5" />
+                <div className="flex flex-col">
+                   <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Type</span>
+                   <span className="text-xs font-bold text-white/60 lowercase">{field.fieldType}</span>
                 </div>
-                <div className=\"h-8 w-px bg-white/5\" />
-                <div className=\"flex flex-col\">
-                   <span className=\"text-[9px] font-black uppercase text-white/20 tracking-widest\">Status</span>
-                   <div className=\"flex items-center gap-1.5 mt-0.5\">
-                      <div className={cn(\"h-1.5 w-1.5 rounded-full\", field.isActive ? \"bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]\" : \"bg-white/10\")} />
-                      <div className={cn(\"h-1.5 w-1.5 rounded-full\", field.isVisible !== false ? \"bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]\" : \"bg-white/10\")} />
+                <div className="h-8 w-px bg-white/5" />
+                <div className="flex flex-col">
+                   <span className="text-[9px] font-black uppercase text-white/20 tracking-widest">Status</span>
+                   <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className={cn("h-1.5 w-1.5 rounded-full", field.isActive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-white/10")} />
+                      <div className={cn("h-1.5 w-1.5 rounded-full", field.isVisible !== false ? "bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" : "bg-white/10")} />
                    </div>
                 </div>
              </div>
            )}
 
            {isBulk && (
-              <div className=\"flex items-center gap-4 px-6 py-2 bg-amber-500/5 border border-amber-500/20 rounded-2xl\">
-                 <Activity size={16} className=\"text-amber-400 animate-pulse\" />
-                 <span className=\"text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/60\">Multi-Node Selection Active</span>
+              <div className="flex items-center gap-4 px-6 py-2 bg-amber-500/5 border border-amber-500/20 rounded-2xl">
+                 <Activity size={16} className="text-amber-400 animate-pulse" />
+                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/60">Multi-Node Selection Active</span>
               </div>
            )}
 
-           <Button variant=\"ghost\" size=\"icon\" onClick={onClose} className=\"h-10 w-10 border border-white/5 rounded-xl hover:bg-white/5 ml-auto\">
-              <X size={20} className=\"text-white/20\" />
+           <Button variant="ghost" size="icon" onClick={onClose} className="h-10 w-10 border border-white/5 rounded-xl hover:bg-white/5 ml-auto">
+              <X size={20} className="text-white/20" />
            </Button>
         </div>
 
         {/* Action Tabs */}
-        <div className=\"flex-1 overflow-hidden flex flex-col\">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className=\"h-full flex flex-col\">
-            <div className=\"px-8 pt-4 bg-white/[0.01]\">
-              <TabsList className=\"bg-white/5 border border-white/5 p-1 rounded-xl w-full\">
-                <TabsTrigger value=\"identity\" className=\"flex-1 text-[9px] uppercase font-black tracking-widest py-2.5\">Identity</TabsTrigger>
-                <TabsTrigger value=\"logic\" className=\"flex-1 text-[9px] uppercase font-black tracking-widest py-2.5\">Logic Architect</TabsTrigger>
-                <TabsTrigger value=\"values\" className=\"flex-1 text-[9px] uppercase font-black tracking-widest py-2.5\">Values</TabsTrigger>
-                <TabsTrigger value=\"matrix\" className=\"flex-1 text-[9px] uppercase font-black tracking-widest py-2.5\">App Matrix</TabsTrigger>
-                <TabsTrigger value=\"advanced\" className=\"flex-1 text-[9px] uppercase font-black tracking-widest py-2.5\">Advanced</TabsTrigger>
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+            <div className="px-8 pt-4 bg-white/[0.01]">
+              <TabsList className="bg-white/5 border border-white/5 p-1 rounded-xl w-full">
+                <TabsTrigger value="identity" className="flex-1 text-[9px] uppercase font-black tracking-widest py-2.5">Identity</TabsTrigger>
+                <TabsTrigger value="logic" className="flex-1 text-[9px] uppercase font-black tracking-widest py-2.5">Logic Architect</TabsTrigger>
+                <TabsTrigger value="values" className="flex-1 text-[9px] uppercase font-black tracking-widest py-2.5">Values</TabsTrigger>
+                <TabsTrigger value="matrix" className="flex-1 text-[9px] uppercase font-black tracking-widest py-2.5">App Matrix</TabsTrigger>
+                <TabsTrigger value="advanced" className="flex-1 text-[9px] uppercase font-black tracking-widest py-2.5">Advanced</TabsTrigger>
               </TabsList>
             </div>
 
-            <div className=\"flex-1 overflow-y-auto custom-scrollbar p-8\">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
               
               {/* identity Tab */}
-              <TabsContent value=\"identity\" className=\"space-y-8 mt-0 animate-in fade-in slide-in-from-right-4 duration-500\">
+              <TabsContent value="identity" className="space-y-8 mt-0 animate-in fade-in slide-in-from-right-4 duration-500">
                  {!isBulk && (
                     <>
-                      <div className=\"grid grid-cols-2 gap-6\">
-                        <div className=\"space-y-2.5\">
-                          <Label className=\"text-[10px] font-black uppercase tracking-widest text-white/30\">Display Name</Label>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-white/30">Display Name</Label>
                           <Input 
-                              value={formData.fieldDisplayName || \"\"} 
+                              value={formData.fieldDisplayName || ""} 
                               onChange={e => setFormData(p => ({ ...p, fieldDisplayName: e.target.value }))}
-                              placeholder=\"User facing label...\"
-                              className=\"h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] font-bold focus:ring-primary/40 transition-all shadow-inner\"
+                              placeholder="User facing label..."
+                              className="h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] font-bold focus:ring-primary/40 transition-all shadow-inner"
                           />
                         </div>
-                        <div className=\"space-y-2.5\">
-                          <Label className=\"text-[10px] font-black uppercase tracking-widest text-white/30\">System Key (fieldName)</Label>
+                        <div className="space-y-2.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-white/30">System Key (fieldName)</Label>
                           <Input 
-                              value={formData.fieldName || \"\"} 
+                              value={formData.fieldName || ""} 
                               onChange={e => setFormData(p => ({ ...p, fieldName: e.target.value }))}
-                              placeholder=\"internalIdentifier\"
-                              className=\"h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] font-mono text-white/50 focus:ring-primary/40 transition-all shadow-inner\"
+                              placeholder="internalIdentifier"
+                              className="h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] font-mono text-white/50 focus:ring-primary/40 transition-all shadow-inner"
                           />
                         </div>
                       </div>
 
-                      <div className=\"grid grid-cols-2 gap-6 pt-4\">
-                        <div className=\"space-y-2.5\">
-                          <Label className=\"text-[10px] font-black uppercase tracking-widest text-white/30\">Field Group / Category</Label>
+                      <div className="grid grid-cols-2 gap-6 pt-4">
+                        <div className="space-y-2.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-white/30">Field Group / Category</Label>
                           <Input 
-                              value={formData.fieldGroup || \"\"} 
+                              value={formData.fieldGroup || ""} 
                               onChange={e => setFormData(p => ({ ...p, fieldGroup: e.target.value }))}
-                              className=\"h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] shadow-inner\"
+                              className="h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] shadow-inner"
                           />
                         </div>
-                        <div className=\"space-y-2.5\">
-                          <Label className=\"text-[10px] font-black uppercase tracking-widest text-white/30\">Internal Comments</Label>
+                        <div className="space-y-2.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-white/30">Internal Comments</Label>
                           <Input 
-                              value={formData.comments || \"\"} 
+                              value={formData.comments || ""} 
                               onChange={e => setFormData(p => ({ ...p, comments: e.target.value }))}
-                              placeholder=\"Rationale...\"
-                              className=\"h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] shadow-inner\"
+                              placeholder="Rationale..."
+                              className="h-12 bg-[#0c0c12] border-white/5 rounded-xl text-[13px] shadow-inner"
                           />
                         </div>
                       </div>
@@ -413,72 +413,72 @@ export function FieldEditorDrawer({
                  )}
 
                  {isBulk && (
-                    <div className=\"p-8 bg-amber-500/[0.03] border border-amber-500/10 rounded-[2rem] space-y-4\">
-                       <div className=\"flex items-center gap-3 text-amber-500\">
+                    <div className="p-8 bg-amber-500/[0.03] border border-amber-500/10 rounded-[2rem] space-y-4">
+                       <div className="flex items-center gap-3 text-amber-500">
                           <Layers size={18} />
-                          <span className=\"text-sm font-black uppercase tracking-widest\">Bulk Attributes Update</span>
+                          <span className="text-sm font-black uppercase tracking-widest">Bulk Attributes Update</span>
                        </div>
-                       <p className=\"text-xs text-amber-200/40 leading-relaxed\">
-                          Applying changes to <strong className=\"text-amber-400 font-black\">{bulkFields.length}</strong> selected nodes. 
+                       <p className="text-xs text-amber-200/40 leading-relaxed">
+                          Applying changes to <strong className="text-amber-400 font-black">{bulkFields.length}</strong> selected nodes. 
                           Only the attributes toggled below will be synchronized across the selection.
                        </p>
                     </div>
                  )}
 
-                 <Separator className=\"bg-white/5\" />
+                 <Separator className="bg-white/5" />
 
-                 <div className=\"grid grid-cols-2 gap-4\">
+                 <div className="grid grid-cols-2 gap-4">
                     <StatusToggle 
-                      label=\"Active State\" 
+                      label="Active State" 
                       checked={!!formData.isActive} 
                       onChange={v => setFormData(p => ({ ...p, isActive: v }))} 
-                      desc=\"Field is operational in the Leah environment.\"
+                      desc="Field is operational in the Leah environment."
                     />
                     <StatusToggle 
-                      label=\"Mandatory\" 
+                      label="Mandatory" 
                       checked={!!formData.isRequired} 
                       onChange={v => setFormData(p => ({ ...p, isRequired: v }))} 
-                      desc=\"Global default mandatory status.\"
+                      desc="Global default mandatory status."
                     />
                     <StatusToggle 
-                      label=\"Visible Form\" 
+                      label="Visible Form" 
                       checked={formData.isVisible !== false} 
                       onChange={v => setFormData(p => ({ ...p, isVisible: v }))} 
-                      desc=\"Field appears on initial form load.\"
+                      desc="Field appears on initial form load."
                     />
                     <StatusToggle 
-                      label=\"Universal Field\" 
+                      label="Universal Field" 
                       checked={!!formData.isForAllApplicationTypes} 
                       onChange={v => setFormData(p => ({ ...p, isForAllApplicationTypes: v }))} 
-                      desc=\"Ignore app-type scope restrictions.\"
+                      desc="Ignore app-type scope restrictions."
                     />
                  </div>
               </TabsContent>
 
                {/* Logic Architect Tab */}
-               <TabsContent value=\"logic\" className=\"space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500\">
-                  <div className=\"flex flex-col gap-6\">
-                    <div className=\"space-y-4\">
-                      <div className=\"flex items-center justify-between bg-white/[0.03] p-4 rounded-2xl border border-white/5\">
-                        <div className=\"flex flex-col\">
-                          <span className=\"text-[11px] font-black uppercase tracking-widest text-primary\">Gating Conditions</span>
-                          <span className=\"text-[9px] text-white/20\">Logic that determines when this field is visible on the form.</span>
+               <TabsContent value="logic" className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500">
+                  <div className="flex flex-col gap-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between bg-white/[0.03] p-4 rounded-2xl border border-white/5">
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-black uppercase tracking-widest text-primary">Gating Conditions</span>
+                          <span className="text-[9px] text-white/20">Logic that determines when this field is visible on the form.</span>
                         </div>
-                        <div className=\"flex bg-[#0c0c12] p-1 rounded-xl border border-white/5\">
+                        <div className="flex bg-[#0c0c12] p-1 rounded-xl border border-white/5">
                           <button 
-                            onClick={() => setLogicMode(\"visual\")}
+                            onClick={() => setLogicMode("visual")}
                             className={cn(
-                              \"px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all\",
-                              logicMode === \"visual\" ? \"bg-primary text-primary-foreground shadow-lg\" : \"text-white/20 hover:text-white/40\"
+                              "px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                              logicMode === "visual" ? "bg-primary text-primary-foreground shadow-lg" : "text-white/20 hover:text-white/40"
                             )}
                           >
                             Visual Tree
                           </button>
                           <button 
-                            onClick={() => setLogicMode(\"expert\")}
+                            onClick={() => setLogicMode("expert")}
                             className={cn(
-                              \"px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all\",
-                              logicMode === \"expert\" ? \"bg-amber-500 text-white shadow-lg\" : \"text-white/20 hover:text-white/40\"
+                              "px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                              logicMode === "expert" ? "bg-amber-500 text-white shadow-lg" : "text-white/20 hover:text-white/40"
                             )}
                           >
                             Expert JSON
@@ -486,8 +486,8 @@ export function FieldEditorDrawer({
                         </div>
                       </div>
 
-                      {logicMode === \"visual\" ? (
-                        <div className=\"p-1 bg-white/[0.01] border border-white/5 rounded-[2rem]\">
+                      {logicMode === "visual" ? (
+                        <div className="p-1 bg-white/[0.01] border border-white/5 rounded-[2rem]">
                           <LogicDecisionTree 
                             logic={logic} 
                             onChange={setLogic} 
@@ -495,43 +495,43 @@ export function FieldEditorDrawer({
                           />
                         </div>
                       ) : (
-                        <div className=\"space-y-4\">
-                          <div className=\"flex items-center gap-2 text-amber-500\">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 text-amber-500">
                             <FileCode size={14} />
-                            <span className=\"text-[10px] font-black uppercase tracking-widest\">Raw Logic Payload</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Raw Logic Payload</span>
                           </div>
                           <textarea
                             value={rawLogicJson}
                             onChange={e => setRawLogicJson(e.target.value)}
-                            className=\"w-full h-[300px] bg-black/40 border border-white/10 rounded-2xl p-6 font-mono text-[11px] text-amber-400/80 focus:ring-1 focus:ring-amber-500/30 outline-none shadow-2xl custom-scrollbar\"
+                            className="w-full h-[300px] bg-black/40 border border-white/10 rounded-2xl p-6 font-mono text-[11px] text-amber-400/80 focus:ring-1 focus:ring-amber-500/30 outline-none shadow-2xl custom-scrollbar"
                           />
                         </div>
                       )}
                     </div>
 
                     {impactRules.length > 0 && (
-                      <div className=\"space-y-4 pt-6 border-t border-white/5\">
-                        <div className=\"flex flex-col\">
-                          <span className=\"text-[11px] font-black uppercase tracking-widest text-violet-400\">Driven Impact</span>
-                          <span className=\"text-[9px] text-white/20\">This metadata acts as a trigger for the following downstream logic rules.</span>
+                      <div className="space-y-4 pt-6 border-t border-white/5">
+                        <div className="flex flex-col">
+                          <span className="text-[11px] font-black uppercase tracking-widest text-violet-400">Driven Impact</span>
+                          <span className="text-[9px] text-white/20">This metadata acts as a trigger for the following downstream logic rules.</span>
                         </div>
-                        <div className=\"grid gap-3\">
+                        <div className="grid gap-3">
                           {impactRules.map((rule, idx) => (
-                            <div key={idx} className=\"p-4 bg-violet-500/5 border border-violet-500/10 rounded-[1.5rem] flex items-center justify-between group hover:bg-violet-500/10 transition-all\">
-                               <div className=\"flex flex-col gap-1\">
-                                  <span className=\"text-xs font-bold text-white/80 group-hover:text-white transition-colors\">
-                                     {rule.fieldDisplayName || rule.fieldName || \"Unnamed Downstream Field\"}
+                            <div key={idx} className="p-4 bg-violet-500/5 border border-violet-500/10 rounded-[1.5rem] flex items-center justify-between group hover:bg-violet-500/10 transition-all">
+                               <div className="flex flex-col gap-1">
+                                  <span className="text-xs font-bold text-white/80 group-hover:text-white transition-colors">
+                                     {rule.fieldDisplayName || rule.fieldName || "Unnamed Downstream Field"}
                                   </span>
-                                  <div className=\"flex items-center gap-2\">
-                                     <Badge variant=\"outline\" className=\"text-[8px] border-violet-500/20 bg-violet-500/10 text-violet-400 font-black h-4 px-1.5 uppercase\">
+                                  <div className="flex items-center gap-2">
+                                     <Badge variant="outline" className="text-[8px] border-violet-500/20 bg-violet-500/10 text-violet-400 font-black h-4 px-1.5 uppercase">
                                         Logic Source
                                      </Badge>
-                                     <span className=\"text-[9px] text-white/20 font-mono italic\">
+                                     <span className="text-[9px] text-white/20 font-mono italic">
                                         {rule.logicDescription}
                                      </span>
                                   </div>
                                </div>
-                               <Layers size={14} className=\"text-white/10 group-hover:text-violet-400/40 transition-colors\" />
+                               <Layers size={14} className="text-white/10 group-hover:text-violet-400/40 transition-colors" />
                             </div>
                           ))}
                         </div>
@@ -539,44 +539,44 @@ export function FieldEditorDrawer({
                     )}
 
                     {logic.rules.length === 0 && impactRules.length === 0 && (
-                      <div className=\"py-24 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-20\">
-                         <Zap size={32} className=\"mx-auto mb-4\" />
-                         <p className=\"text-[10px] font-black uppercase tracking-[0.4em] italic text-white/40\">No Logic Artifacts Detected</p>
+                      <div className="py-24 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-20">
+                         <Zap size={32} className="mx-auto mb-4" />
+                         <p className="text-[10px] font-black uppercase tracking-[0.4em] italic text-white/40">No Logic Artifacts Detected</p>
                       </div>
                     )}
                   </div>
                </TabsContent>
 
               {/* Values Tab */}
-              <TabsContent value=\"values\" className=\"space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500\">
-                 <div className=\"flex items-center justify-between\">
-                    <div className=\"flex flex-col\">
-                       <span className=\"text-[11px] font-black uppercase tracking-widest text-blue-400\">Option Dictionary</span>
-                       <span className=\"text-[9px] text-white/20\">Manage labels and unique values for this control.</span>
+              <TabsContent value="values" className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500">
+                 <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                       <span className="text-[11px] font-black uppercase tracking-widest text-blue-400">Option Dictionary</span>
+                       <span className="text-[9px] text-white/20">Manage labels and unique values for this control.</span>
                     </div>
                     <Button 
-                      variant=\"outline\" 
-                      size=\"sm\" 
-                      className=\"h-8 rounded-lg border-blue-500/20 bg-blue-500/5 text-blue-400 text-[10px] font-black uppercase tracking-widest\"
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 rounded-lg border-blue-500/20 bg-blue-500/5 text-blue-400 text-[10px] font-black uppercase tracking-widest"
                       onClick={() => {
                         const next = [...(formData.options || [])];
                         next.push({ 
                           fieldOptionId: -Math.random(), 
-                          fieldOptionValue: \"New Option\", 
+                          fieldOptionValue: "New Option", 
                           isActive: true,
                           isDefault: false
                         } as any);
                         setFormData(p => ({ ...p, options: next }));
                       }}
                     >
-                      <Plus size={12} className=\"mr-1.5\" /> Add Option
+                      <Plus size={12} className="mr-1.5" /> Add Option
                     </Button>
                  </div>
                  
-                 <div className=\"space-y-2\">
+                 <div className="space-y-2">
                     {(formData.options || []).map((opt, idx) => (
-                      <div key={idx} className=\"flex items-center gap-3 p-3 bg-white/[0.03] border border-white/5 rounded-xl group/opt\">
-                         <div className=\"h-2 w-2 rounded-full bg-blue-500/40\" />
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-white/[0.03] border border-white/5 rounded-xl group/opt">
+                         <div className="h-2 w-2 rounded-full bg-blue-500/40" />
                          <Input 
                             value={opt.fieldOptionValue} 
                             onChange={e => {
@@ -584,11 +584,11 @@ export function FieldEditorDrawer({
                                next[idx].fieldOptionValue = e.target.value;
                                setFormData(p => ({ ...p, options: next }));
                             }}
-                            className=\"bg-transparent border-none focus:ring-0 text-[13px] font-bold p-0 h-auto\"
+                            className="bg-transparent border-none focus:ring-0 text-[13px] font-bold p-0 h-auto"
                          />
-                         <div className=\"ml-auto flex items-center gap-4\">
-                            <div className=\"flex items-center gap-2\">
-                               <span className=\"text-[9px] font-black text-white/20 uppercase tracking-widest\">Default</span>
+                         <div className="ml-auto flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                               <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Default</span>
                                <Switch 
                                   checked={!!opt.isDefault} 
                                   onCheckedChange={v => {
@@ -598,9 +598,9 @@ export function FieldEditorDrawer({
                                />
                             </div>
                             <Button 
-                               variant=\"ghost\" 
-                               size=\"icon\" 
-                               className=\"h-8 w-8 text-white/10 hover:text-red-400 hover:bg-red-400/10 rounded-lg opacity-0 group-hover/opt:opacity-100 transition-all\"
+                               variant="ghost" 
+                               size="icon" 
+                               className="h-8 w-8 text-white/10 hover:text-red-400 hover:bg-red-400/10 rounded-lg opacity-0 group-hover/opt:opacity-100 transition-all"
                                onClick={() => {
                                   const next = [...(formData.options || [])];
                                   next.splice(idx, 1);
@@ -613,41 +613,41 @@ export function FieldEditorDrawer({
                       </div>
                     ))}
                     {(formData.options || []).length === 0 && (
-                      <div className=\"py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-20\">
-                         <ListOrdered size={32} className=\"mx-auto mb-4\" />
-                         <p className=\"text-[10px] font-black uppercase tracking-[0.3em] italic text-white/40\">No Options Defined</p>
+                      <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-20">
+                         <ListOrdered size={32} className="mx-auto mb-4" />
+                         <p className="text-[10px] font-black uppercase tracking-[0.3em] italic text-white/40">No Options Defined</p>
                       </div>
                     )}
                  </div>
               </TabsContent>
 
               {/* Matrix Tab */}
-              <TabsContent value=\"matrix\" className=\"space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500\">
-                 <div className=\"flex flex-col\">
-                    <span className=\"text-[11px] font-black uppercase tracking-widest text-violet-400\">Application Type Matrix</span>
-                    <span className=\"text-[9px] text-white/20\">Configure mandatory status specific to selected application nodes.</span>
+              <TabsContent value="matrix" className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500">
+                 <div className="flex flex-col">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-violet-400">Application Type Matrix</span>
+                    <span className="text-[9px] text-white/20">Configure mandatory status specific to selected application nodes.</span>
                  </div>
                  
-                 <div className=\"space-y-2\">
+                 <div className="space-y-2">
                      {appTypes.map(appType => {
                         const matrixEntry = (formData.applicationTypeMandatoryData || []).find(m => m.applicationTypeId === appType.applicationTypeId);
                         const isAssigned = normalizedAppTypeIds.includes(appType.applicationTypeId);
 
                         return (
                           <div key={appType.applicationTypeId} className={cn(
-                             \"flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl hover:bg-white/[0.05] transition-all group/at\",
-                             isAssigned && \"border-primary/20 bg-primary/[0.02]\"
+                             "flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl hover:bg-white/[0.05] transition-all group/at",
+                             isAssigned && "border-primary/20 bg-primary/[0.02]"
                           )}>
-                             <div className=\"flex flex-col\">
-                                <span className={cn(\"text-xs font-bold transition-colors\", isAssigned ? \"text-primary\" : \"text-white/80\")}>
+                             <div className="flex flex-col">
+                                <span className={cn("text-xs font-bold transition-colors", isAssigned ? "text-primary" : "text-white/80")}>
                                    {appType.applicationTypeName}
                                 </span>
-                                <span className=\"text-[9px] font-mono text-white/20 uppercase\">ID: {appType.applicationTypeId}</span>
+                                <span className="text-[9px] font-mono text-white/20 uppercase">ID: {appType.applicationTypeId}</span>
                              </div>
-                             <div className=\"flex items-center gap-6\">
-                                <div className=\"flex items-center gap-2 pr-6 border-r border-white/5\">
-                                   <span className={cn(\"text-[8px] font-black uppercase tracking-widest transition-colors\", isAssigned ? \"text-primary\" : \"text-white/20\")}>
-                                      {isAssigned ? \"Assigned\" : \"Inactive\"}
+                             <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2 pr-6 border-r border-white/5">
+                                   <span className={cn("text-[8px] font-black uppercase tracking-widest transition-colors", isAssigned ? "text-primary" : "text-white/20")}>
+                                      {isAssigned ? "Assigned" : "Inactive"}
                                    </span>
                                    <Switch 
                                       checked={isAssigned} 
@@ -662,8 +662,8 @@ export function FieldEditorDrawer({
                                       }}
                                    />
                                 </div>
-                                <div className=\"flex items-center gap-2 opacity-50 group-hover/at:opacity-100 transition-opacity\">
-                                   <span className=\"text-[9px] font-black text-white/20 uppercase tracking-widest\">Required</span>
+                                <div className="flex items-center gap-2 opacity-50 group-hover/at:opacity-100 transition-opacity">
+                                   <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">Required</span>
                                    <Switch 
                                       checked={!!matrixEntry?.isMandatory} 
                                       disabled={!isAssigned}
@@ -687,72 +687,72 @@ export function FieldEditorDrawer({
               </TabsContent>
 
               {/* Advanced Tab */}
-              <TabsContent value=\"advanced\" className=\"space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500\">
-                <div className=\"flex flex-col\">
-                  <span className=\"text-[11px] font-black uppercase tracking-widest text-emerald-400\">Advanced Settings</span>
-                  <span className=\"text-[9px] text-white/20\">Configuration flags and old-prod specific fields.</span>
+              <TabsContent value="advanced" className="space-y-6 mt-0 animate-in fade-in slide-in-from-right-4 duration-500">
+                <div className="flex flex-col">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-emerald-400">Advanced Settings</span>
+                  <span className="text-[9px] text-white/20">Configuration flags and old-prod specific fields.</span>
                 </div>
 
                 {/* Old prod detail raw viewer */}
                 {oldProdDetail && (
-                  <div className=\"space-y-4\">
-                    <div className=\"grid grid-cols-2 gap-4\">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <StatusToggle
-                        label=\"Allow Custom Options\"
+                        label="Allow Custom Options"
                         checked={!!(oldProdDetail?.allowToAddOptionFromRequest)}
                         onChange={() => {}}
-                        desc=\"Let users add options from the request form.\"
+                        desc="Let users add options from the request form."
                       />
                       <StatusToggle
-                        label=\"Show in Roles & Permissions\"
+                        label="Show in Roles & Permissions"
                         checked={!!(oldProdDetail?.displayInRolesAndPermissions)}
                         onChange={() => {}}
-                        desc=\"Display this field in role-based permissions.\"
+                        desc="Display this field in role-based permissions."
                       />
                       <StatusToggle
-                        label=\"Show Select All\"
+                        label="Show Select All"
                         checked={!!(oldProdDetail?.showSelectAll)}
                         onChange={() => {}}
-                        desc=\"Show 'Select All' in multi-select controls.\"
+                        desc="Show 'Select All' in multi-select controls."
                       />
                       <StatusToggle
-                        label=\"Evergreen Visible\"
+                        label="Evergreen Visible"
                         checked={!!(oldProdDetail?.isEvergreenVisible)}
                         onChange={() => {}}
-                        desc=\"Field visible in evergreen contract mode.\"
+                        desc="Field visible in evergreen contract mode."
                       />
                     </div>
 
                     {/* Guidance text */}
-                    <div className=\"space-y-2.5\">
-                      <Label className=\"text-[10px] font-black uppercase tracking-widest text-white/30\">Guidance Text (HTML)</Label>
+                    <div className="space-y-2.5">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-white/30">Guidance Text (HTML)</Label>
                       <textarea
-                        value={formData.guidanceText || oldProdDetail?.guidanceText || \"\"}
+                        value={formData.guidanceText || oldProdDetail?.guidanceText || ""}
                         onChange={e => setFormData(p => ({ ...p, guidanceText: e.target.value }))}
                         rows={5}
-                        placeholder=\"HTML guidance content...\"
-                        className=\"w-full bg-[#0c0c12] border border-white/5 rounded-xl px-4 py-3 text-[12px] font-mono text-amber-400/70 focus:ring-1 focus:ring-amber-500/30 outline-none custom-scrollbar resize-y\"
+                        placeholder="HTML guidance content..."
+                        className="w-full bg-[#0c0c12] border border-white/5 rounded-xl px-4 py-3 text-[12px] font-mono text-amber-400/70 focus:ring-1 focus:ring-amber-500/30 outline-none custom-scrollbar resize-y"
                       />
                     </div>
 
                     {/* Raw old-prod schema */}
-                    <div className=\"p-4 bg-white/[0.02] border border-white/5 rounded-2xl\">
-                      <div className=\"flex items-center justify-between mb-3\">
-                        <span className=\"text-[10px] font-black uppercase tracking-widest text-white/20\">Old Prod Schema</span>
+                    <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-white/20">Old Prod Schema</span>
                         <button
-                          onClick={() => { navigator.clipboard.writeText(JSON.stringify(oldProdDetail, null, 2)); toast.success(\"Copied\"); }}
-                          className=\"text-[9px] text-muted-foreground/40 hover:text-primary transition-colors\"
+                          onClick={() => { navigator.clipboard.writeText(JSON.stringify(oldProdDetail, null, 2)); toast.success("Copied"); }}
+                          className="text-[9px] text-muted-foreground/40 hover:text-primary transition-colors"
                         >copy</button>
                       </div>
-                      <pre className=\"text-[10px] font-mono text-emerald-400/60 max-h-[300px] overflow-auto leading-relaxed whitespace-pre-wrap break-all custom-scrollbar\">
+                      <pre className="text-[10px] font-mono text-emerald-400/60 max-h-[300px] overflow-auto leading-relaxed whitespace-pre-wrap break-all custom-scrollbar">
                         {JSON.stringify(oldProdDetail, null, 2)}
                       </pre>
                     </div>
                   </div>
                 )}
                 {!oldProdDetail && (
-                  <div className=\"py-16 text-center opacity-30\">
-                    <p className=\"text-[10px] font-black uppercase tracking-widest\">Loading old prod schema...</p>
+                  <div className="py-16 text-center opacity-30">
+                    <p className="text-[10px] font-black uppercase tracking-widest">Loading old prod schema...</p>
                   </div>
                 )}
               </TabsContent>
@@ -762,17 +762,17 @@ export function FieldEditorDrawer({
         </div>
 
         {/* Footer Actions */}
-        <div className=\"p-8 border-t border-white/5 bg-white/[0.012] flex gap-3\">
+        <div className="p-8 border-t border-white/5 bg-white/[0.012] flex gap-3">
            <Button 
-            variant=\"outline\" 
+            variant="outline" 
             onClick={onClose}
-            className=\"flex-1 h-14 rounded-2xl border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white\"
+            className="flex-1 h-14 rounded-2xl border-white/10 bg-white/5 text-[11px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-white"
            >
               Discard Changes
            </Button>
            <Button 
             onClick={handleSave}
-            className=\"flex-1 h-14 rounded-2xl bg-primary hover:bg-primary/80 text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] shadow-xl shadow-primary/5 gap-2\"
+            className="flex-1 h-14 rounded-2xl bg-primary hover:bg-primary/80 text-primary-foreground font-black uppercase tracking-[0.2em] text-[11px] shadow-xl shadow-primary/5 gap-2"
            >
               <Save size={18} />
               Save Metadata
@@ -785,12 +785,12 @@ export function FieldEditorDrawer({
 
 function StatusToggle({ label, checked, onChange, desc }: { label: string; checked: boolean; onChange: (v: boolean) => void; desc: string }) {
   return (
-    <div className=\"p-4 bg-white/[0.03] border border-white/5 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/[0.05]\">
-       <div className=\"flex flex-col gap-0.5\">
-          <span className=\"text-[11px] font-black uppercase tracking-tight text-white/80\">{label}</span>
-          <span className=\"text-[9px] text-white/20 group-hover:text-white/40 transition-colors\">{desc}</span>
+    <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl flex items-center justify-between group transition-all hover:bg-white/[0.05]">
+       <div className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-black uppercase tracking-tight text-white/80">{label}</span>
+          <span className="text-[9px] text-white/20 group-hover:text-white/40 transition-colors">{desc}</span>
        </div>
-       <Switch checked={checked} onCheckedChange={onChange} className=\"data-[state=checked]:bg-primary\" />
+       <Switch checked={checked} onCheckedChange={onChange} className="data-[state=checked]:bg-primary" />
     </div>
   );
 }
